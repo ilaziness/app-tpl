@@ -1,12 +1,12 @@
 package app
 
 import (
-	httphandler "github.com/example/app-tpl/internal/handler/http"
-	"github.com/example/app-tpl/internal/health"
-	"github.com/example/app-tpl/internal/repository"
-	"github.com/example/app-tpl/internal/router"
-	"github.com/example/app-tpl/internal/server"
-	"github.com/example/app-tpl/internal/service"
+	httphandler "github.com/ilaziness/app-tpl/internal/handler/http"
+	"github.com/ilaziness/app-tpl/internal/health"
+	"github.com/ilaziness/app-tpl/internal/repository"
+	"github.com/ilaziness/app-tpl/internal/router"
+	"github.com/ilaziness/app-tpl/internal/server"
+	"github.com/ilaziness/app-tpl/internal/service"
 )
 
 func (a *App) wireHTTP() error {

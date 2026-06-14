@@ -2,8 +2,8 @@
 package tracing
 
 import (
-	"github.com/example/app-tpl/internal/config"
 	"github.com/gin-gonic/gin"
+	"github.com/ilaziness/app-tpl/internal/config"
 	"go.opentelemetry.io/contrib/instrumentation/github.com/gin-gonic/gin/otelgin"
 )
 

@@ -2,7 +2,7 @@
 package udp
 
 import (
-	"github.com/example/app-tpl/internal/types"
+	"github.com/ilaziness/app-tpl/internal/types"
 )
 
 // SubPacketHandler handles a specific application-level message type within a Dispatcher.

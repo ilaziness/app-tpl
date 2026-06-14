@@ -9,9 +9,9 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/example/app-tpl/internal/config"
-	"github.com/example/app-tpl/internal/constant"
 	_ "github.com/go-sql-driver/mysql"
+	"github.com/ilaziness/app-tpl/internal/config"
+	"github.com/ilaziness/app-tpl/internal/constant"
 	"github.com/uptrace/bun"
 	"github.com/uptrace/bun/dialect/mysqldialect"
 	"github.com/uptrace/bun/dialect/pgdialect"

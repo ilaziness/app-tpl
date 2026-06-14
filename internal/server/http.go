@@ -7,13 +7,13 @@ import (
 	stdhttp "net/http"
 	"time"
 
-	"github.com/example/app-tpl/internal/auth"
-	"github.com/example/app-tpl/internal/config"
-	"github.com/example/app-tpl/internal/metrics"
-	httpmiddleware "github.com/example/app-tpl/internal/middleware/http"
-	"github.com/example/app-tpl/internal/router"
-	"github.com/example/app-tpl/internal/tracing"
 	"github.com/gin-gonic/gin"
+	"github.com/ilaziness/app-tpl/internal/auth"
+	"github.com/ilaziness/app-tpl/internal/config"
+	"github.com/ilaziness/app-tpl/internal/metrics"
+	httpmiddleware "github.com/ilaziness/app-tpl/internal/middleware/http"
+	"github.com/ilaziness/app-tpl/internal/router"
+	"github.com/ilaziness/app-tpl/internal/tracing"
 	"go.uber.org/zap"
 )
 

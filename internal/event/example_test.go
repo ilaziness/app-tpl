@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/example/app-tpl/internal/event"
+	"github.com/ilaziness/app-tpl/internal/event"
 )
 
 // ExampleEventBus 事件总线基本使用示例

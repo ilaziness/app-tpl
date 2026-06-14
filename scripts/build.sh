@@ -13,7 +13,7 @@ mkdir -p ${BUILD_DIR}
 
 # 构建二进制文件
 CGO_ENABLED=0 GOOS=${GOOS} GOARCH=${GOARCH} go build \
-    -ldflags="-s -w -X github.com/example/app-tpl/cmd.version=${VERSION}" \
+    -ldflags="-s -w -X github.com/ilaziness/app-tpl/cmd.version=${VERSION}" \
     -o ${BUILD_DIR}/app-tpl .
 
 echo "Build complete: ${BUILD_DIR}/app-tpl"

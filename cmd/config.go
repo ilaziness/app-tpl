@@ -3,7 +3,7 @@ package cmd
 import (
 	"fmt"
 
-	"github.com/example/app-tpl/internal/config"
+	"github.com/ilaziness/app-tpl/internal/config"
 	"github.com/spf13/cobra"
 )
 

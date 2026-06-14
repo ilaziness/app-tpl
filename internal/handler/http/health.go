@@ -4,11 +4,11 @@ import (
 	"context"
 	"time"
 
-	"github.com/example/app-tpl/internal/config"
-	errcode "github.com/example/app-tpl/internal/errcode"
-	"github.com/example/app-tpl/internal/health"
-	"github.com/example/app-tpl/internal/response"
 	"github.com/gin-gonic/gin"
+	"github.com/ilaziness/app-tpl/internal/config"
+	errcode "github.com/ilaziness/app-tpl/internal/errcode"
+	"github.com/ilaziness/app-tpl/internal/health"
+	"github.com/ilaziness/app-tpl/internal/response"
 )
 
 const readinessCheckTimeout = 5 * time.Second

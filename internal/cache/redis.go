@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/example/app-tpl/internal/config"
+	"github.com/ilaziness/app-tpl/internal/config"
 	"github.com/redis/go-redis/v9"
 )
 

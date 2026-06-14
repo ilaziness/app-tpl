@@ -28,7 +28,7 @@ A flexible Go application template framework that supports multiple service type
 
 ```bash
 # Clone the repository
-git clone https://github.com/example/app-tpl.git
+git clone https://github.com/ilaziness/app-tpl.git
 cd app-tpl
 
 # Download dependencies

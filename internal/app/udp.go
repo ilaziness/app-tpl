@@ -1,8 +1,8 @@
 package app
 
 import (
-	udphandler "github.com/example/app-tpl/internal/handler/udp"
-	"github.com/example/app-tpl/internal/server"
+	udphandler "github.com/ilaziness/app-tpl/internal/handler/udp"
+	"github.com/ilaziness/app-tpl/internal/server"
 )
 
 func (a *App) wireUDP() error {

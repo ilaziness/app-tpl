@@ -4,7 +4,7 @@ package tcp
 import (
 	"golang.org/x/time/rate"
 
-	"github.com/example/app-tpl/internal/types"
+	"github.com/ilaziness/app-tpl/internal/types"
 	"go.uber.org/zap"
 )
 

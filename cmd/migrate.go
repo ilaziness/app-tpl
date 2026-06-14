@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"time"
 
-	dbmigrate "github.com/example/app-tpl/internal/database/migrate"
+	dbmigrate "github.com/ilaziness/app-tpl/internal/database/migrate"
 	"github.com/spf13/cobra"
 )
 

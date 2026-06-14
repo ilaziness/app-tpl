@@ -3,7 +3,7 @@ package router
 import (
 	"fmt"
 
-	httphandler "github.com/example/app-tpl/internal/handler/http"
+	httphandler "github.com/ilaziness/app-tpl/internal/handler/http"
 )
 
 // Handlers aggregates HTTP handlers for route registration.

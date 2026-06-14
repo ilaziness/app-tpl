@@ -9,9 +9,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/example/app-tpl/internal/config"
-	"github.com/example/app-tpl/internal/protocol"
-	"github.com/example/app-tpl/internal/types"
+	"github.com/ilaziness/app-tpl/internal/config"
+	"github.com/ilaziness/app-tpl/internal/protocol"
+	"github.com/ilaziness/app-tpl/internal/types"
 	"go.uber.org/zap"
 )
 

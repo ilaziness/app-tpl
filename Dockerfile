@@ -20,7 +20,7 @@ COPY . .
 # 构建应用
 ARG VERSION=1.0.0
 RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build \
-    -ldflags="-s -w -X github.com/example/app-tpl/cmd.version=${VERSION}" \
+    -ldflags="-s -w -X github.com/ilaziness/app-tpl/cmd.version=${VERSION}" \
     -o app-tpl .
 
 # 阶段 2: 运行阶段（使用 distroless 提高安全性）

@@ -4,7 +4,7 @@ import (
 	"context"
 	"time"
 
-	"github.com/example/app-tpl/internal/database"
+	"github.com/ilaziness/app-tpl/internal/database"
 )
 
 const defaultDatabaseCheckTimeout = 5 * time.Second

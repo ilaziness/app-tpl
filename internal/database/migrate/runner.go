@@ -9,7 +9,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/example/app-tpl/internal/database"
+	"github.com/ilaziness/app-tpl/internal/database"
 	bunmigrate "github.com/uptrace/bun/migrate"
 )
 

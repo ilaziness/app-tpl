@@ -52,8 +52,8 @@ package repository
 import (
     "context"
 
-    "github.com/example/app-tpl/internal/database"
-    "github.com/example/app-tpl/internal/model"
+    "github.com/ilaziness/app-tpl/internal/database"
+    "github.com/ilaziness/app-tpl/internal/model"
 )
 
 type OrderRepository interface {
@@ -91,8 +91,8 @@ package service
 import (
     "context"
 
-    "github.com/example/app-tpl/internal/dto"
-    "github.com/example/app-tpl/internal/repository"
+    "github.com/ilaziness/app-tpl/internal/dto"
+    "github.com/ilaziness/app-tpl/internal/repository"
 )
 
 type OrderService interface {
@@ -121,9 +121,9 @@ func (s *orderService) CreateOrder(ctx context.Context, req *dto.CreateOrderRequ
 package http
 
 import (
-    "github.com/example/app-tpl/internal/dto"
-    "github.com/example/app-tpl/internal/response"
-    "github.com/example/app-tpl/internal/service"
+    "github.com/ilaziness/app-tpl/internal/dto"
+    "github.com/ilaziness/app-tpl/internal/response"
+    "github.com/ilaziness/app-tpl/internal/service"
     "github.com/gin-gonic/gin"
 )
 

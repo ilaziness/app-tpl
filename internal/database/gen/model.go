@@ -10,8 +10,8 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/example/app-tpl/internal/constant"
-	"github.com/example/app-tpl/internal/database"
+	"github.com/ilaziness/app-tpl/internal/constant"
+	"github.com/ilaziness/app-tpl/internal/database"
 	"golang.org/x/text/cases"
 	"golang.org/x/text/language"
 )

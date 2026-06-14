@@ -2,8 +2,8 @@
 package main
 
 import (
-	"github.com/example/app-tpl/cmd"
-	_ "github.com/example/app-tpl/docs"
+	"github.com/ilaziness/app-tpl/cmd"
+	_ "github.com/ilaziness/app-tpl/docs/swagger"
 )
 
 // @title App Template API

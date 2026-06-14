@@ -7,9 +7,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/example/app-tpl/internal/config"
-	"github.com/example/app-tpl/internal/router"
 	"github.com/gin-gonic/gin"
+	"github.com/ilaziness/app-tpl/internal/config"
+	"github.com/ilaziness/app-tpl/internal/router"
 	dto "github.com/prometheus/client_model/go"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"

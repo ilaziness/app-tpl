@@ -15,7 +15,15 @@ GOGET := $(GOCMD) get
 GOMOD := $(GOCMD) mod
 
 # Build flags
-LDFLAGS := -ldflags "-X github.com/example/app-tpl/cmd.version=$(VERSION)"
+LDFLAGS := -ldflags "-X github.com/ilaziness/app-tpl/cmd.version=$(VERSION)"
+
+# Fail if $(1) is not in PATH; $(2) = suggested install command
+define require_tool
+	@command -v $(1) >/dev/null 2>&1 || { \
+		printf 'Error: %s not found in PATH.\nInstall with:\n  %s\n' '$(1)' '$(2)'; \
+		exit 1; \
+	}
+endef
 
 # Default target
 all: build
@@ -63,8 +71,8 @@ benchmark:
 
 ## mock: Generate mock files using mockgen
 mock:
+	$(call require_tool,mockgen,go install go.uber.org/mock/mockgen@latest)
 	@echo "Generating mock files..."
-	@go install go.uber.org/mock/mockgen@latest
 	mockgen -source=internal/service/user.go -destination=internal/service/mock_user.go
 	mockgen -source=internal/repository/user.go -destination=internal/repository/mock_user.go
 
@@ -81,8 +89,8 @@ deps:
 
 ## lint: Run linter
 lint:
+	$(call require_tool,golangci-lint,go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.12.2)
 	@echo "Running linter..."
-	@go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.12.2
 	golangci-lint run --timeout=5m ./...
 
 ## fmt: Format code
@@ -143,14 +151,15 @@ clean-all: clean
 
 ## swagger: Generate Swagger documentation
 swagger:
+	$(call require_tool,swag,go install github.com/swaggo/swag/cmd/swag@latest)
 	@echo "Generating Swagger documentation..."
-	@go install github.com/swaggo/swag/cmd/swag@latest
-	swag init -g main.go -o docs
-	@echo "Swagger documentation generated at docs/"
+	swag init -g main.go -o docs/swagger
+	@echo "Swagger documentation generated at docs/swagger/"
 
 ## swagger-clean: Clean generated Swagger documentation
 swagger-clean:
 	@echo "Cleaning Swagger documentation..."
+	@rm -rf docs/swagger/docs.go docs/swagger/swagger.json docs/swagger/swagger.yaml
 	@echo "Swagger documentation cleaned"
 
 ## help: Show this help message

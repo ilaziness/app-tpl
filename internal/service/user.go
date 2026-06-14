@@ -8,11 +8,11 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/example/app-tpl/internal/crypto"
-	"github.com/example/app-tpl/internal/dto"
-	"github.com/example/app-tpl/internal/errcode"
-	"github.com/example/app-tpl/internal/model"
-	"github.com/example/app-tpl/internal/repository"
+	"github.com/ilaziness/app-tpl/internal/crypto"
+	"github.com/ilaziness/app-tpl/internal/dto"
+	"github.com/ilaziness/app-tpl/internal/errcode"
+	"github.com/ilaziness/app-tpl/internal/model"
+	"github.com/ilaziness/app-tpl/internal/repository"
 )
 
 // UserService defines the contract for user business logic.

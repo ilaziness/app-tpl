@@ -9,7 +9,8 @@ app-tpl/
 ├── configs/                         # 配置文件（config.yaml 及环境覆盖）
 ├── migrations/                      # 数据库迁移脚本（*.up.sql / *.down.sql）
 ├── docs/                            # 项目文档
-│   └── agents/                      # Agent 专题文档（从 AGENTS.md 拆分）
+│   ├── agents/                      # Agent 专题文档（从 AGENTS.md 拆分）
+│   └── swagger/                     # Swagger 生成代码与 OpenAPI 规范（make swagger）
 ├── scripts/                         # 构建、部署、测试脚本
 ├── data/                            # 本地运行时数据（如 SQLite 文件）
 ├── test/                            # 集成测试

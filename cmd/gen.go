@@ -4,9 +4,9 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/example/app-tpl/internal/config"
-	"github.com/example/app-tpl/internal/database"
-	"github.com/example/app-tpl/internal/database/gen"
+	"github.com/ilaziness/app-tpl/internal/config"
+	"github.com/ilaziness/app-tpl/internal/database"
+	"github.com/ilaziness/app-tpl/internal/database/gen"
 	"github.com/spf13/cobra"
 )
 

@@ -8,11 +8,11 @@ import (
 	"sync"
 	"time"
 
-	errcode "github.com/example/app-tpl/internal/errcode"
-	"github.com/example/app-tpl/internal/response"
 	"github.com/gin-gonic/gin"
 	redisrate "github.com/go-redis/redis_rate/v10"
 	lru "github.com/hashicorp/golang-lru/v2"
+	errcode "github.com/ilaziness/app-tpl/internal/errcode"
+	"github.com/ilaziness/app-tpl/internal/response"
 	"go.uber.org/zap"
 	"golang.org/x/time/rate"
 )

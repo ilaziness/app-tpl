@@ -4,10 +4,10 @@ package response
 import (
 	"net/http"
 
-	"github.com/example/app-tpl/internal/config"
-	"github.com/example/app-tpl/internal/constant"
-	errcode "github.com/example/app-tpl/internal/errcode"
 	"github.com/gin-gonic/gin"
+	"github.com/ilaziness/app-tpl/internal/config"
+	"github.com/ilaziness/app-tpl/internal/constant"
+	errcode "github.com/ilaziness/app-tpl/internal/errcode"
 )
 
 // Response represents a standard API response.

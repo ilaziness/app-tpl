@@ -1,4 +1,4 @@
-module github.com/example/app-tpl
+module github.com/ilaziness/app-tpl
 
 go 1.26.4
 

@@ -1,8 +1,8 @@
 package router
 
 import (
-	httphandler "github.com/example/app-tpl/internal/handler/http"
 	"github.com/gin-gonic/gin"
+	httphandler "github.com/ilaziness/app-tpl/internal/handler/http"
 )
 
 func registerSystemRoutes(engine *gin.Engine, health *httphandler.HealthHandler) {

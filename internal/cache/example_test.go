@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/example/app-tpl/internal/cache"
+	"github.com/ilaziness/app-tpl/internal/cache"
 )
 
 // ExampleMemoryCache 内存缓存基本使用示例

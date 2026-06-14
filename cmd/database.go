@@ -3,9 +3,9 @@ package cmd
 import (
 	"fmt"
 
-	"github.com/example/app-tpl/internal/config"
-	"github.com/example/app-tpl/internal/database"
-	"github.com/example/app-tpl/internal/logger"
+	"github.com/ilaziness/app-tpl/internal/config"
+	"github.com/ilaziness/app-tpl/internal/database"
+	"github.com/ilaziness/app-tpl/internal/logger"
 )
 
 func newLoggerFromConfig(cfg *config.Config) (*logger.Logger, error) {

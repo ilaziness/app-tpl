@@ -2,7 +2,7 @@
 package tcp
 
 import (
-	"github.com/example/app-tpl/internal/types"
+	"github.com/ilaziness/app-tpl/internal/types"
 )
 
 // SubMessageHandler handles a specific application-level message type within a handler.

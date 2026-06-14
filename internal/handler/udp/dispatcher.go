@@ -4,7 +4,7 @@ package udp
 import (
 	"encoding/json"
 
-	"github.com/example/app-tpl/internal/types"
+	"github.com/ilaziness/app-tpl/internal/types"
 	"go.uber.org/zap"
 )
 

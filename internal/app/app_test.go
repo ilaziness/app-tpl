@@ -6,8 +6,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/example/app-tpl/internal/config"
-	"github.com/example/app-tpl/internal/health"
+	"github.com/ilaziness/app-tpl/internal/config"
+	"github.com/ilaziness/app-tpl/internal/health"
 	"github.com/stretchr/testify/require"
 )
 

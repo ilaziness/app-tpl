@@ -4,8 +4,8 @@ import (
 	"context"
 	"testing"
 
-	"github.com/example/app-tpl/internal/constant"
-	"github.com/example/app-tpl/internal/database/testutil"
+	"github.com/ilaziness/app-tpl/internal/constant"
+	"github.com/ilaziness/app-tpl/internal/database/testutil"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )

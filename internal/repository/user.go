@@ -7,8 +7,8 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/example/app-tpl/internal/database"
-	"github.com/example/app-tpl/internal/model"
+	"github.com/ilaziness/app-tpl/internal/database"
+	"github.com/ilaziness/app-tpl/internal/model"
 	"github.com/uptrace/bun"
 )
 

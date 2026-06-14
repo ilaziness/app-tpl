@@ -27,7 +27,7 @@ make build
 等效命令（与 Makefile 一致）：
 
 ```bash
-go build -ldflags "-X github.com/example/app-tpl/cmd.version=1.0.0" -o build/app-tpl ./main.go
+go build -ldflags "-X github.com/ilaziness/app-tpl/cmd.version=1.0.0" -o build/app-tpl ./main.go
 ```
 
 Windows 下产物为 `build/app-tpl.exe`。
@@ -45,6 +45,8 @@ make test
 ```
 
 ### 5. Lint
+
+需已安装 golangci-lint（见 [commands.md](commands.md#开发工具)）：
 
 ```bash
 make lint

@@ -4,7 +4,7 @@
 
 ## 项目概述
 
-Go 后端应用模板，模块路径 `github.com/example/app-tpl`，Go 1.26.4。
+Go 后端应用模板，模块路径 `github.com/ilaziness/app-tpl`，Go 1.26.4。
 
 | 类别 | 技术 |
 |------|------|

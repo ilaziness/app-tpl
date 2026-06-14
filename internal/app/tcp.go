@@ -1,8 +1,8 @@
 package app
 
 import (
-	tcphandler "github.com/example/app-tpl/internal/handler/tcp"
-	"github.com/example/app-tpl/internal/server"
+	tcphandler "github.com/ilaziness/app-tpl/internal/handler/tcp"
+	"github.com/ilaziness/app-tpl/internal/server"
 )
 
 func (a *App) wireTCP() error {

@@ -8,8 +8,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/example/app-tpl/internal/config"
-	"github.com/example/app-tpl/internal/router"
+	"github.com/ilaziness/app-tpl/internal/config"
+	"github.com/ilaziness/app-tpl/internal/router"
 	"github.com/spf13/cobra"
 )
 

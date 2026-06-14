@@ -6,7 +6,7 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/example/app-tpl/internal/constant"
+	"github.com/ilaziness/app-tpl/internal/constant"
 	"github.com/joho/godotenv"
 	"github.com/spf13/viper"
 )

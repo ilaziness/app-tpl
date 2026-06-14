@@ -2,7 +2,7 @@
 package metrics
 
 import (
-	"github.com/example/app-tpl/internal/config"
+	"github.com/ilaziness/app-tpl/internal/config"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/collectors"
 	"github.com/prometheus/client_golang/prometheus/promauto"

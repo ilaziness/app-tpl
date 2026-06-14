@@ -5,9 +5,9 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/example/app-tpl/internal/config"
-	httphandler "github.com/example/app-tpl/internal/handler/http"
 	"github.com/gin-gonic/gin"
+	"github.com/ilaziness/app-tpl/internal/config"
+	httphandler "github.com/ilaziness/app-tpl/internal/handler/http"
 	"github.com/stretchr/testify/require"
 )
 

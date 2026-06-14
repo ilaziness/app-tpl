@@ -5,8 +5,8 @@ import (
 	"errors"
 	"time"
 
-	"github.com/example/app-tpl/internal/config"
 	"github.com/golang-jwt/jwt/v5"
+	"github.com/ilaziness/app-tpl/internal/config"
 )
 
 // TokenType represents the type of JWT token.

@@ -7,8 +7,8 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/example/app-tpl/internal/database"
-	"github.com/example/app-tpl/internal/database/testutil"
+	"github.com/ilaziness/app-tpl/internal/database"
+	"github.com/ilaziness/app-tpl/internal/database/testutil"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/uptrace/bun"

@@ -3,10 +3,10 @@ package cmd
 import (
 	"fmt"
 
-	"github.com/example/app-tpl/internal/app"
-	"github.com/example/app-tpl/internal/config"
-	"github.com/example/app-tpl/internal/constant"
 	"github.com/gin-gonic/gin"
+	"github.com/ilaziness/app-tpl/internal/app"
+	"github.com/ilaziness/app-tpl/internal/config"
+	"github.com/ilaziness/app-tpl/internal/constant"
 	"github.com/spf13/cobra"
 )
 

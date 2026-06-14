@@ -1,9 +1,9 @@
 package router
 
 import (
-	httphandler "github.com/example/app-tpl/internal/handler/http"
-	httpmiddleware "github.com/example/app-tpl/internal/middleware/http"
 	"github.com/gin-gonic/gin"
+	httphandler "github.com/ilaziness/app-tpl/internal/handler/http"
+	httpmiddleware "github.com/ilaziness/app-tpl/internal/middleware/http"
 )
 
 func registerAdminRoutes(engine *gin.Engine, h *Handlers) {

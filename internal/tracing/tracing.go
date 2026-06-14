@@ -5,7 +5,7 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/example/app-tpl/internal/config"
+	"github.com/ilaziness/app-tpl/internal/config"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/sdk/trace"
 )

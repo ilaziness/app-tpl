@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/example/app-tpl/internal/constant"
+	"github.com/ilaziness/app-tpl/internal/constant"
 )
 
 // testdataDir 返回 testdata 目录路径

@@ -5,8 +5,8 @@ import (
 	"database/sql"
 	"testing"
 
-	"github.com/example/app-tpl/internal/database"
-	"github.com/example/app-tpl/internal/model"
+	"github.com/ilaziness/app-tpl/internal/database"
+	"github.com/ilaziness/app-tpl/internal/model"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/uptrace/bun"

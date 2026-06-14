@@ -25,7 +25,7 @@
 
 ```bash
 # 克隆仓库
-git clone https://github.com/example/app-tpl.git
+git clone https://github.com/ilaziness/app-tpl.git
 cd app-tpl
 
 # 下载依赖

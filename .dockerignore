@@ -12,8 +12,11 @@ build/
 coverage.out
 coverage.html
 
-# 文档
-docs/
+# 文档（保留 docs/swagger/docs.go 供编译，排除其余 markdown/swagger 静态文件）
+docs/*
+!docs/swagger/
+docs/swagger/*
+!docs/swagger/docs.go
 *.md
 !README.md
 !README_CN.md

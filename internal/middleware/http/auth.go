@@ -5,11 +5,11 @@ import (
 	"errors"
 	"strings"
 
-	"github.com/example/app-tpl/internal/auth"
-	errcode "github.com/example/app-tpl/internal/errcode"
-	"github.com/example/app-tpl/internal/response"
 	"github.com/gin-gonic/gin"
 	"github.com/golang-jwt/jwt/v5"
+	"github.com/ilaziness/app-tpl/internal/auth"
+	errcode "github.com/ilaziness/app-tpl/internal/errcode"
+	"github.com/ilaziness/app-tpl/internal/response"
 )
 
 const (

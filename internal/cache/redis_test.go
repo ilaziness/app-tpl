@@ -7,7 +7,7 @@ import (
 	"time"
 
 	"github.com/alicebob/miniredis/v2"
-	"github.com/example/app-tpl/internal/config"
+	"github.com/ilaziness/app-tpl/internal/config"
 )
 
 func setupTestRedis(t *testing.T) (*miniredis.Miniredis, config.RedisConfig) {

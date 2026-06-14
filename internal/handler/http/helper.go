@@ -1,10 +1,10 @@
 package http
 
 import (
-	errcode "github.com/example/app-tpl/internal/errcode"
-	"github.com/example/app-tpl/internal/response"
-	"github.com/example/app-tpl/internal/validator"
 	"github.com/gin-gonic/gin"
+	errcode "github.com/ilaziness/app-tpl/internal/errcode"
+	"github.com/ilaziness/app-tpl/internal/response"
+	"github.com/ilaziness/app-tpl/internal/validator"
 )
 
 // BindAndValidate 绑定并验证请求参数

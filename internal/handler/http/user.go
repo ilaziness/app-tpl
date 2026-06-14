@@ -2,12 +2,12 @@
 package http
 
 import (
-	"github.com/example/app-tpl/internal/dto"
-	errcode "github.com/example/app-tpl/internal/errcode"
-	"github.com/example/app-tpl/internal/model"
-	"github.com/example/app-tpl/internal/response"
-	"github.com/example/app-tpl/internal/service"
 	"github.com/gin-gonic/gin"
+	"github.com/ilaziness/app-tpl/internal/dto"
+	errcode "github.com/ilaziness/app-tpl/internal/errcode"
+	"github.com/ilaziness/app-tpl/internal/model"
+	"github.com/ilaziness/app-tpl/internal/response"
+	"github.com/ilaziness/app-tpl/internal/service"
 )
 
 // UserHandler handles user-related HTTP requests.

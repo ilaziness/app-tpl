@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/example/app-tpl/internal/constant"
+	"github.com/ilaziness/app-tpl/internal/constant"
 )
 
 func validateOneOf(field, value string, allowed ...string) error {

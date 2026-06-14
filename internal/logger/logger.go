@@ -5,7 +5,7 @@ import (
 	"os"
 	"strings"
 
-	"github.com/example/app-tpl/internal/constant"
+	"github.com/ilaziness/app-tpl/internal/constant"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 	"gopkg.in/natefinch/lumberjack.v2"

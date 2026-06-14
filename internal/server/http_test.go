@@ -3,9 +3,9 @@ package server
 import (
 	"testing"
 
-	"github.com/example/app-tpl/internal/config"
-	httphandler "github.com/example/app-tpl/internal/handler/http"
-	"github.com/example/app-tpl/internal/router"
+	"github.com/ilaziness/app-tpl/internal/config"
+	httphandler "github.com/ilaziness/app-tpl/internal/handler/http"
+	"github.com/ilaziness/app-tpl/internal/router"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 )

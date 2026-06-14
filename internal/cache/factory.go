@@ -3,7 +3,7 @@ package cache
 import (
 	"fmt"
 
-	"github.com/example/app-tpl/internal/config"
+	"github.com/ilaziness/app-tpl/internal/config"
 )
 
 // CacheFactory 缓存工厂
