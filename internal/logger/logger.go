@@ -29,6 +29,19 @@ type Logger struct {
 	sugar *zap.SugaredLogger
 }
 
+// Log is the package-level logger instance initialized by Init.
+var Log *Logger
+
+// Init initializes the package-level logger instance.
+func Init(cfg Config) error {
+	logInst, err := New(cfg)
+	if err != nil {
+		return err
+	}
+	Log = logInst
+	return nil
+}
+
 // New creates a new logger instance.
 func New(cfg Config) (*Logger, error) {
 	// Parse log level

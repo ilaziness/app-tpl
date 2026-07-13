@@ -26,7 +26,10 @@ Go 后端应用模板，模块路径 `github.com/ilaziness/app-tpl`，Go 1.26.4�
 4. **错误码**：`internal/errcode`，格式 `{3位模块码}{4位业务码}`（100 通用 / 200 用户 / 300 认证 / 900 系统）
 5. **依赖注入**：构造函数注入，仅在 `internal/app` 组装，禁止全局变量
 6. **数据库**：必须使用 Bun 官方包（见 [coding-standards.md](docs/agents/coding-standards.md)）
-7. **修改后验证**：`make fmt && make vet && make build && make test`（详见 [verification.md](docs/agents/verification.md)）
+7. **代码设计**：遵循高内聚、低耦合原则，保持模块职责单一、边界清晰，避免跨层依赖和隐式耦合
+8. **复用与扩展**：优先抽象稳定且通用的能力，避免重复实现；通过接口、组合和依赖注入支持复用与扩展，避免过度设计
+9. **可读可维护**：代码应简洁、清晰、易理解，命名准确，控制函数和模块复杂度；以易编写、易测试、易维护为质量目标
+10. **修改后验证**：`make fmt && make vet && make build && make test`（详见 [verification.md](docs/agents/verification.md)）
 
 ## 按需查阅
 

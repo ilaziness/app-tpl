@@ -13,7 +13,7 @@ import (
 )
 
 func (a *App) wireInfra() error {
-	logInst, err := logger.New(logger.Config{
+	err := logger.Init(logger.Config{
 		Level:      a.cfg.Log.Level,
 		Format:     a.cfg.Log.Format,
 		Output:     a.cfg.Log.Output,
@@ -26,6 +26,7 @@ func (a *App) wireInfra() error {
 	if err != nil {
 		return err
 	}
+	logInst := logger.Log
 	a.logger = logInst
 	a.log = logInst.Logger
 
