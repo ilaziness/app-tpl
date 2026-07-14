@@ -26,7 +26,7 @@ type ChatHandler struct {
 	broadcast    chan *ChatMessage
 	shutdown     chan struct{}
 	shutdownOnce sync.Once
-	handlers     map[string]SubMessageHandler
+	handlers     map[string]ChatSubHandler
 }
 
 // NewChatHandler creates a new chat handler with all sub-handlers registered.
@@ -36,7 +36,7 @@ func NewChatHandler(logger *zap.Logger) *ChatHandler {
 		clients:   make(map[string]*types.Connection),
 		broadcast: make(chan *ChatMessage, 100),
 		shutdown:  make(chan struct{}),
-		handlers:  make(map[string]SubMessageHandler),
+		handlers:  make(map[string]ChatSubHandler),
 	}
 	h.register(&JoinHandler{chat: h})
 	h.register(&ChatMessageHandler{chat: h})
@@ -45,9 +45,14 @@ func NewChatHandler(logger *zap.Logger) *ChatHandler {
 	return h
 }
 
-// register adds a SubMessageHandler to the dispatch table.
-func (h *ChatHandler) register(sub SubMessageHandler) {
+// register adds a ChatSubHandler to the dispatch table.
+func (h *ChatHandler) register(sub ChatSubHandler) {
 	h.handlers[sub.MessageType()] = sub
+}
+
+// MessageTypes returns the application-level message types handled by ChatHandler.
+func (h *ChatHandler) MessageTypes() []string {
+	return []string{"join", "message", "leave"}
 }
 
 // Shutdown stops the broadcast loop. Safe to call multiple times.

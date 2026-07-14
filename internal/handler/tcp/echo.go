@@ -19,7 +19,12 @@ func NewEchoHandler(logger *zap.Logger) *EchoHandler {
 	}
 }
 
-// Handle implements the Handler interface.
+// MessageType returns the application-level message type this handler processes.
+func (h *EchoHandler) MessageType() string {
+	return "echo"
+}
+
+// Handle implements the types.TCPHandler interface.
 // 接收任何数据并原样返回，用于测试 TCP 连接是否正常。
 func (h *EchoHandler) Handle(conn *types.Connection, data []byte) ([]byte, error) {
 	h.logger.Debug("Echo handler",

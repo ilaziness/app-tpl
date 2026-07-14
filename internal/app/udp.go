@@ -12,9 +12,10 @@ func (a *App) wireUDP() error {
 
 	timeHandler := udphandler.NewTimeHandler(a.log)
 	statsHandler := udphandler.NewStatsHandler(a.log)
-	dispatcher := udphandler.NewDispatcher(a.log, timeHandler, statsHandler)
 
-	a.udpServer = server.NewUDPServer(a.cfg, a.log, dispatcher)
+	router := udphandler.NewRouter(a.log, timeHandler, statsHandler)
+
+	a.udpServer = server.NewUDPServer(a.cfg, a.log, router)
 	statsHandler.SetSessionCountFunc(a.udpServer.GetSessionCount)
 	return nil
 }
