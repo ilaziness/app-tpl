@@ -188,7 +188,7 @@ Echo 服务原样返回接收到的消息，在 `internal/app/tcp.go` 中组装�
 
 #### 聊天室服务
 
-聊天室服务支持多客户端广播，内部采用注册表模式分发消息类型（示例代码在 `handler/tcp/`，待 TCP Dispatcher 后接入 `app/tcp.go`）。
+聊天室服务支持多客户端广播，通过 TCP `Router` 按 `"type"` 字段（`join|message|leave`）路由到 `ChatHandler`，`ChatHandler` 内部再按子类型分发。
 
 聊天消息格式：
 
@@ -204,7 +204,7 @@ Echo 服务原样返回接收到的消息，在 `internal/app/tcp.go` 中组装�
 
 #### 时间查询服务
 
-时间查询服务返回当前服务器时间，通过 `Dispatcher` 按 `"type"` 字段路由，无需手动调用。
+时间查询服务返回当前服务器时间，通过 `Router` 按 `"type"` 字段路由，无需手动调用。
 
 请求格式：
 
@@ -226,7 +226,7 @@ Echo 服务原样返回接收到的消息，在 `internal/app/tcp.go` 中组装�
 
 #### 统计服务
 
-统计服务返回服务器统计信息，通过 `Dispatcher` 按 `"type"` 字段路由，无需手动调用。
+统计服务返回服务器统计信息，通过 `Router` 按 `"type"` 字段路由，无需手动调用。
 
 请求格式：
 
@@ -382,18 +382,34 @@ func main() {
 
 ### 添加新的 TCP 消息类型
 
-项目采用注册表模式（Sub-Handler 模式），新增消息类型**不需要修改任何已有文件**：
+项目采用注册表模式，新增顶层消息类型只需两步：
 
-1. 在 `internal/handler/tcp/` 下创建新文件，实现 `SubMessageHandler` 接口：
+1. 在 `internal/handler/tcp/` 下创建新 Handler，实现 `types.TCPHandler` 并可选实现 `MessageTypeProvider`：
 
 ```go
-type SubMessageHandler interface {
+type MessageTypeProvider interface {
     MessageType() string
-    Handle(conn *types.Connection, msg *ChatMessage) error
 }
 ```
 
-2. 在 `ChatHandler.NewChatHandler()` 中调用 `h.register(...)` 注册新的子 Handler。
+如果需要处理多种消息类型，可实现 `MessageTypesProvider`：
+
+```go
+type MessageTypesProvider interface {
+    MessageTypes() []string
+}
+```
+
+2. 在 `internal/app/tcp.go` 的 `wireTCP()` 中构造 Handler，并把它加入 `NewRouter` 的参数列表：
+
+```go
+echoHandler := tcphandler.NewEchoHandler(a.log)
+myHandler := tcphandler.NewMyHandler(a.log)
+
+router := tcphandler.NewRouter(a.log, echoHandler, myHandler)
+```
+
+对于 `ChatHandler` 内部的子消息类型，仍可在 `ChatHandler.NewChatHandler()` 中调用 `h.register(...)` 注册新的 `ChatSubHandler`。
 
 ### 添加新的 UDP 消息类型
 
@@ -406,9 +422,14 @@ type SubPacketHandler interface {
 }
 ```
 
-2. 在 `NewDispatcher()` 的参数列表中加入新 Handler，并调用 `d.register(...)` 完成注册。
+2. 在 `internal/app/udp.go` 的 `wireUDP()` 中构造 Handler，并把它加入 `NewRouter` 的参数列表：
 
-3. 在 `internal/app/udp.go` 的 `wireUDP()` 中组装新 Handler，并在 `NewDispatcher` 中注册。
+```go
+timeHandler := udphandler.NewTimeHandler(a.log)
+myHandler := udphandler.NewMyHandler(a.log)
+
+router := udphandler.NewRouter(a.log, timeHandler, myHandler)
+```
 
 ### 添加新的中间件
 

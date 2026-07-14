@@ -5,8 +5,8 @@ import (
 	"github.com/ilaziness/app-tpl/internal/types"
 )
 
-// SubMessageHandler handles a specific application-level message type within a handler.
-type SubMessageHandler interface {
+// ChatSubHandler handles a specific chat message type within ChatHandler.
+type ChatSubHandler interface {
 	MessageType() string
 	Handle(conn *types.Connection, msg *ChatMessage) error
 }

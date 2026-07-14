@@ -272,6 +272,9 @@ func (s *TCPServer) handleConnection(conn net.Conn) {
 				continue
 			}
 
+			// Extract protocol payload and route it to the application handler.
+			payload := buf[protocol.ProtocolHeaderSize:n]
+
 			// Get handler based on message type
 			s.handlerMutex.RLock()
 			handler, ok := s.handlers[header.Type]
@@ -291,7 +294,7 @@ func (s *TCPServer) handleConnection(conn net.Conn) {
 			}
 
 			// Call handler
-			responseData, err := handler.Handle(connection, buf[:n])
+			responseData, err := handler.Handle(connection, payload)
 			if err != nil {
 				s.logger.Error("Handler error",
 					zap.String("conn_id", connID),

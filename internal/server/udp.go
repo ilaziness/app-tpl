@@ -236,6 +236,9 @@ func (s *UDPServer) packetWorker(workerID int) {
 				continue
 			}
 
+			// Extract protocol payload and route it to the application handler.
+			packet.Data = packet.Data[protocol.ProtocolHeaderSize:]
+
 			// Get handler based on message type
 			s.handlerMutex.RLock()
 			handler, ok := s.handlers[header.Type]
