@@ -5,10 +5,12 @@ import (
 	"time"
 )
 
-// NopCache is a no-op cache implementation that does nothing.
+// NopCache is a no-op Cache implementation. Get always returns ErrCacheMiss,
+// making it useful as a disabled-cache sentinel: callers fall back to the
+// source of truth on every miss.
 type NopCache struct{}
 
-// NewNopCache creates a new no-op cache.
+// NewNopCache creates a NopCache.
 func NewNopCache() *NopCache {
 	return &NopCache{}
 }

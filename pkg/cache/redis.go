@@ -6,38 +6,50 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/ilaziness/app-tpl/internal/config"
 	"github.com/redis/go-redis/v9"
 )
 
-// RedisCacheConfig Redis缓存配置
+// RedisCacheConfig configures a RedisCache (key prefix and default TTL).
 type RedisCacheConfig struct {
-	KeyPrefix  string `mapstructure:"key_prefix"`
-	DefaultTTL int    `mapstructure:"default_ttl"` // 默认过期时间（秒）
+	KeyPrefix  string        // key prefix applied to all keys
+	DefaultTTL time.Duration // default TTL used when Set is called with ttl <= 0
 }
 
-// RedisCache Redis缓存实现
+// RedisOptions describes the Redis connection parameters. It mirrors the
+// subset of go-redis Options used by this package and intentionally avoids
+// any framework-specific tags so the package stays self-contained.
+type RedisOptions struct {
+	Addr            string // host:port
+	Password        string
+	DB              int
+	PoolSize        int
+	MinIdleConns    int
+	ConnMaxIdleTime time.Duration
+}
+
+// RedisCache is a Cache backed by Redis.
 type RedisCache struct {
 	client *redis.Client
 	prefix string
 	ttl    time.Duration
 }
 
-// NewRedisCache 创建新的Redis缓存实例
-func NewRedisCache(cacheConfig RedisCacheConfig, redisConfig config.RedisConfig) (*RedisCache, error) {
+// NewRedisCache creates a RedisCache. It pings Redis once to verify
+// connectivity and returns an error if the server is unreachable.
+func NewRedisCache(cacheConfig RedisCacheConfig, opts RedisOptions) (*RedisCache, error) {
 	client := redis.NewClient(&redis.Options{
-		Addr:            fmt.Sprintf("%s:%d", redisConfig.Host, redisConfig.Port),
-		Password:        redisConfig.Password,
-		DB:              redisConfig.DB,
-		PoolSize:        redisConfig.PoolSize,
-		MinIdleConns:    redisConfig.MinIdleConns,
-		ConnMaxIdleTime: time.Duration(redisConfig.IdleTimeout) * time.Second,
+		Addr:            opts.Addr,
+		Password:        opts.Password,
+		DB:              opts.DB,
+		PoolSize:        opts.PoolSize,
+		MinIdleConns:    opts.MinIdleConns,
+		ConnMaxIdleTime: opts.ConnMaxIdleTime,
 	})
 
-	// 健康检查
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	if err := client.Ping(ctx).Err(); err != nil {
+		_ = client.Close()
 		return nil, fmt.Errorf("failed to connect to Redis: %w", err)
 	}
 
@@ -48,7 +60,7 @@ func NewRedisCache(cacheConfig RedisCacheConfig, redisConfig config.RedisConfig)
 
 	defaultTTL := 1 * time.Hour
 	if cacheConfig.DefaultTTL > 0 {
-		defaultTTL = time.Duration(cacheConfig.DefaultTTL) * time.Second
+		defaultTTL = cacheConfig.DefaultTTL
 	}
 
 	return &RedisCache{
@@ -58,18 +70,20 @@ func NewRedisCache(cacheConfig RedisCacheConfig, redisConfig config.RedisConfig)
 	}, nil
 }
 
-// buildKey 构建带前缀的键
+// buildKey applies the configured prefix to the key.
 func (c *RedisCache) buildKey(key string) string {
 	return c.prefix + key
 }
 
-// Get 获取缓存值
+// Get implements Cache. The stored JSON is unmarshaled into an any so that
+// the return value has the same semantics as MemoryCache.Get (an any, not a
+// raw JSON string).
 func (c *RedisCache) Get(ctx context.Context, key string) (any, error) {
 	if key == "" {
 		return nil, ErrInvalidKey
 	}
 
-	data, err := c.client.Get(ctx, c.buildKey(key)).Result()
+	data, err := c.client.Get(ctx, c.buildKey(key)).Bytes()
 	if err == redis.Nil {
 		return nil, ErrCacheMiss
 	}
@@ -81,21 +95,26 @@ func (c *RedisCache) Get(ctx context.Context, key string) (any, error) {
 		}
 	}
 
-	// 返回原始 JSON 数据，由调用方决定如何反序列化
-	return data, nil
+	var value any
+	if err := json.Unmarshal(data, &value); err != nil {
+		return nil, &CacheError{
+			Code:    "REDIS_UNMARSHAL_ERROR",
+			Message: "failed to unmarshal cached value",
+			Err:     err,
+		}
+	}
+	return value, nil
 }
 
-// Set 设置缓存值
+// Set implements Cache. The value is JSON-marshaled before storage.
 func (c *RedisCache) Set(ctx context.Context, key string, value any, ttl time.Duration) error {
 	if key == "" {
 		return ErrInvalidKey
 	}
-
 	if ttl <= 0 {
 		ttl = c.ttl
 	}
 
-	// 使用 JSON 序列化
 	data, err := json.Marshal(value)
 	if err != nil {
 		return &CacheError{
@@ -105,42 +124,36 @@ func (c *RedisCache) Set(ctx context.Context, key string, value any, ttl time.Du
 		}
 	}
 
-	err = c.client.Set(ctx, c.buildKey(key), data, ttl).Err()
-	if err != nil {
+	if err := c.client.Set(ctx, c.buildKey(key), data, ttl).Err(); err != nil {
 		return &CacheError{
 			Code:    "REDIS_SET_ERROR",
 			Message: "failed to set value to Redis",
 			Err:     err,
 		}
 	}
-
 	return nil
 }
 
-// Delete 删除缓存值
+// Delete implements Cache.
 func (c *RedisCache) Delete(ctx context.Context, key string) error {
 	if key == "" {
 		return ErrInvalidKey
 	}
-
-	err := c.client.Del(ctx, c.buildKey(key)).Err()
-	if err != nil {
+	if err := c.client.Del(ctx, c.buildKey(key)).Err(); err != nil {
 		return &CacheError{
 			Code:    "REDIS_DELETE_ERROR",
 			Message: "failed to delete value from Redis",
 			Err:     err,
 		}
 	}
-
 	return nil
 }
 
-// Exists 检查键是否存在
+// Exists implements Cache.
 func (c *RedisCache) Exists(ctx context.Context, key string) (bool, error) {
 	if key == "" {
 		return false, ErrInvalidKey
 	}
-
 	count, err := c.client.Exists(ctx, c.buildKey(key)).Result()
 	if err != nil {
 		return false, &CacheError{
@@ -149,15 +162,13 @@ func (c *RedisCache) Exists(ctx context.Context, key string) (bool, error) {
 			Err:     err,
 		}
 	}
-
 	return count > 0, nil
 }
 
-// Clear 清空缓存（删除所有带前缀的键）
+// Clear implements Cache. It scans and deletes all keys with the configured
+// prefix. Intended for tests/development only.
 func (c *RedisCache) Clear(ctx context.Context) error {
-	// 注意：生产环境慎用，这里仅用于测试
 	pattern := c.prefix + "*"
-
 	var cursor uint64
 	for {
 		keys, nextCursor, err := c.client.Scan(ctx, cursor, pattern, 100).Result()
@@ -168,7 +179,6 @@ func (c *RedisCache) Clear(ctx context.Context) error {
 				Err:     err,
 			}
 		}
-
 		if len(keys) > 0 {
 			if err := c.client.Del(ctx, keys...).Err(); err != nil {
 				return &CacheError{
@@ -178,17 +188,15 @@ func (c *RedisCache) Clear(ctx context.Context) error {
 				}
 			}
 		}
-
 		cursor = nextCursor
 		if cursor == 0 {
 			break
 		}
 	}
-
 	return nil
 }
 
-// Close 关闭Redis连接
+// Close implements Cache.
 func (c *RedisCache) Close() error {
 	return c.client.Close()
 }

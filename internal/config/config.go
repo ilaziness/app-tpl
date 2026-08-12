@@ -139,7 +139,7 @@ type CacheConfig struct {
 // MemoryCacheConfig 内存缓存（Ristretto）参数。
 type MemoryCacheConfig struct {
 	NumCounters int64 `mapstructure:"num_counters"` // 计数器数量，建议为预计键数量的 10 倍
-	MaxCost     int64 `mapstructure:"max_cost"`     // 最大内存成本（字节）
+	MaxCost     int64 `mapstructure:"max_cost"`     // 最大缓存条目数（每条目 cost=1）
 	BufferItems int64 `mapstructure:"buffer_items"` // 写入缓冲区大小，默认 64
 }
 
@@ -465,7 +465,7 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("cache.enabled", false)
 	v.SetDefault("cache.driver", "memory")
 	v.SetDefault("cache.memory.num_counters", 1000000)
-	v.SetDefault("cache.memory.max_cost", 1073741824) // 1GB
+	v.SetDefault("cache.memory.max_cost", 100000) // max cached items (cost=1 per item)
 	v.SetDefault("cache.memory.buffer_items", 64)
 	v.SetDefault("cache.redis.key_prefix", "app:")
 	v.SetDefault("cache.redis.default_ttl", 3600) // 1 hour in seconds

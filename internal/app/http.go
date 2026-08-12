@@ -11,7 +11,7 @@ import (
 
 func (a *App) wireHTTP() error {
 	userRepo := repository.NewUserRepo(a.db)
-	userSvc := service.NewUserService(userRepo)
+	userSvc := service.NewUserService(userRepo, a.cacheMgr)
 
 	if !a.cfg.HTTP.Enabled {
 		return nil

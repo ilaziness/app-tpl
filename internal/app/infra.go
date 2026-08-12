@@ -42,15 +42,14 @@ func (a *App) wireInfra() error {
 
 	a.jwtMgr = auth.NewJWTManagerFromConfig(a.cfg)
 
-	cacheFactory := cache.NewCacheFactory(a.cfg)
-	c, err := cacheFactory.Create()
+	cacheMgr, err := cache.NewManagerFromConfig(a.cfg)
 	if err != nil {
 		return err
 	}
-	a.cache = c
+	a.cacheMgr = cacheMgr
 	a.addHook(Hook{
 		Name:   "cache",
-		OnStop: func(ctx context.Context) error { return a.cache.Close() },
+		OnStop: func(ctx context.Context) error { return a.cacheMgr.Close() },
 	})
 
 	a.eventBus = event.NewEventBusWithLogger(a.log)

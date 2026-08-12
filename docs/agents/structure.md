@@ -14,10 +14,12 @@ app-tpl/
 ├── scripts/                         # 构建、部署、测试脚本
 ├── data/                            # 本地运行时数据（如 SQLite 文件）
 ├── test/                            # 集成测试
+├── pkg/                             # 可复用的通用包（不依赖 internal）
+│   └── cache/                       # 通用缓存原语（Cache 接口、Memory/Redis/Multi/Nop 实现、Factory、errors、KeyGenerator）
 ├── internal/                        # 私有业务代码（外部不可导入）
 │   ├── app/                         # 应用组装与生命周期（手动 DI 唯一入口）
 │   ├── auth/                        # JWT 认证与令牌管理
-│   ├── cache/                       # 缓存抽象与实现（内存、Redis、多级）
+│   ├── cache/                       # 业务缓存集中管理（KeySpec + Manager，typed Get/Set/Delete）
 │   ├── config/                      # 配置结构体、加载与校验
 │   ├── constant/                    # 应用级常量
 │   ├── crypto/                      # 密码哈希等加密工具

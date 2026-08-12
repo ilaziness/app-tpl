@@ -7,15 +7,25 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/ilaziness/app-tpl/internal/cache"
 	"github.com/ilaziness/app-tpl/internal/crypto"
 	"github.com/ilaziness/app-tpl/internal/dto"
 	"github.com/ilaziness/app-tpl/internal/errcode"
 	"github.com/ilaziness/app-tpl/internal/model"
 	"github.com/ilaziness/app-tpl/internal/repository"
+	pkgcache "github.com/ilaziness/app-tpl/pkg/cache"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/uptrace/bun"
 )
+
+// testCacheManager returns a Manager backed by NopCache. Every Get yields
+// ErrCacheMiss so cache-aside falls through to the repository, keeping
+// existing mock-based tests unchanged.
+func testCacheManager(t *testing.T) *cache.Manager {
+	t.Helper()
+	return cache.NewManager(pkgcache.NewNopCache())
+}
 
 // MockUserRepository 是 repository.UserRepository 的 mock 实现
 type MockUserRepository struct {
@@ -140,7 +150,7 @@ func TestUserService_Create(t *testing.T) {
 			mockRepo := new(MockUserRepository)
 			tt.mockFn(mockRepo)
 
-			service := NewUserService(mockRepo)
+			service := NewUserService(mockRepo, testCacheManager(t))
 			resp, err := service.Create(context.Background(), tt.req)
 
 			if tt.wantErr {
@@ -205,7 +215,7 @@ func TestUserService_GetByID(t *testing.T) {
 			mockRepo := new(MockUserRepository)
 			tt.mockFn(mockRepo)
 
-			service := NewUserService(mockRepo)
+			service := NewUserService(mockRepo, testCacheManager(t))
 			user, err := service.GetByID(context.Background(), tt.id)
 
 			if tt.wantErr {
@@ -291,7 +301,7 @@ func TestUserService_ValidateCredentials(t *testing.T) {
 			mockRepo := new(MockUserRepository)
 			tt.mockFn(mockRepo)
 
-			service := NewUserService(mockRepo)
+			service := NewUserService(mockRepo, testCacheManager(t))
 			user, err := service.ValidateCredentials(context.Background(), tt.email, tt.password)
 
 			if tt.wantErr {
@@ -312,7 +322,7 @@ func TestUserService_ValidateCredentials(t *testing.T) {
 
 func TestUserService_Update(t *testing.T) {
 	mockRepo := new(MockUserRepository)
-	service := NewUserService(mockRepo)
+	service := NewUserService(mockRepo, testCacheManager(t))
 
 	req := &dto.UpdateUserRequest{
 		ID:   1,
@@ -332,7 +342,7 @@ func TestUserService_Update(t *testing.T) {
 
 func TestUserService_Delete(t *testing.T) {
 	mockRepo := new(MockUserRepository)
-	service := NewUserService(mockRepo)
+	service := NewUserService(mockRepo, testCacheManager(t))
 
 	existingUser := &model.User{ID: 1, Email: "test@example.com", Name: "Test", Status: 1}
 	mockRepo.On("GetByID", mock.Anything, int64(1)).Return(existingUser, nil)
@@ -345,7 +355,7 @@ func TestUserService_Delete(t *testing.T) {
 
 func TestUserService_Delete_NotFound(t *testing.T) {
 	mockRepo := new(MockUserRepository)
-	service := NewUserService(mockRepo)
+	service := NewUserService(mockRepo, testCacheManager(t))
 
 	mockRepo.On("GetByID", mock.Anything, int64(999)).Return(nil, errors.New("not found"))
 
@@ -402,7 +412,7 @@ func TestUserService_ListWithCount(t *testing.T) {
 			mockRepo := new(MockUserRepository)
 			tt.mockFn(mockRepo)
 
-			service := NewUserService(mockRepo)
+			service := NewUserService(mockRepo, testCacheManager(t))
 			users, total, err := service.ListWithCount(context.Background(), tt.limit, tt.offset)
 
 			if tt.wantErr {
@@ -420,7 +430,7 @@ func TestUserService_ListWithCount(t *testing.T) {
 
 func TestUserService_ListWithCount_ListError(t *testing.T) {
 	mockRepo := new(MockUserRepository)
-	service := NewUserService(mockRepo)
+	service := NewUserService(mockRepo, testCacheManager(t))
 
 	mockRepo.On("List", mock.Anything, 10, 0).Return(nil, fmt.Errorf("database error"))
 

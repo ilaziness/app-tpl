@@ -77,7 +77,7 @@ cache:
   driver: memory  # memory, redis, multi
   memory:
     num_counters: 1000000
-    max_cost: 1073741824  # 1GB
+    max_cost: 100000  # max cached items (cost=1 per item)
     buffer_items: 64
   redis:
     key_prefix: "app:"

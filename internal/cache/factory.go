@@ -2,66 +2,43 @@ package cache
 
 import (
 	"fmt"
+	"time"
 
 	"github.com/ilaziness/app-tpl/internal/config"
+	pkgcache "github.com/ilaziness/app-tpl/pkg/cache"
 )
 
-// CacheFactory 缓存工厂
-type CacheFactory struct {
-	config config.CacheConfig
-	redis  config.RedisConfig
-}
-
-// NewCacheFactory 创建缓存工厂
-func NewCacheFactory(cfg *config.Config) *CacheFactory {
-	return &CacheFactory{
-		config: cfg.Cache,
-		redis:  cfg.Redis,
+// NewManagerFromConfig builds a Manager from the application config. It maps
+// the Viper-loaded config structs to pkg/cache's self-contained config types,
+// keeping pkg/cache decoupled from internal/config.
+func NewManagerFromConfig(cfg *config.Config) (*Manager, error) {
+	factoryCfg := pkgcache.FactoryConfig{
+		Enabled: cfg.Cache.Enabled,
+		Driver:  cfg.Cache.Driver,
+		Memory: pkgcache.MemoryCacheConfig{
+			NumCounters: cfg.Cache.Memory.NumCounters,
+			MaxCost:     cfg.Cache.Memory.MaxCost,
+			BufferItems: cfg.Cache.Memory.BufferItems,
+		},
+		Redis: pkgcache.RedisCacheConfig{
+			KeyPrefix:  cfg.Cache.Redis.KeyPrefix,
+			DefaultTTL: time.Duration(cfg.Cache.Redis.DefaultTTL) * time.Second,
+		},
 	}
-}
-
-// Create 创建缓存实例
-func (f *CacheFactory) Create() (Cache, error) {
-	if !f.config.Enabled {
-		return NewNopCache(), nil
+	if cfg.Redis.Enabled {
+		factoryCfg.RedisOptions = pkgcache.RedisOptions{
+			Addr:            fmt.Sprintf("%s:%d", cfg.Redis.Host, cfg.Redis.Port),
+			Password:        cfg.Redis.Password,
+			DB:              cfg.Redis.DB,
+			PoolSize:        cfg.Redis.PoolSize,
+			MinIdleConns:    cfg.Redis.MinIdleConns,
+			ConnMaxIdleTime: time.Duration(cfg.Redis.IdleTimeout) * time.Second,
+		}
 	}
 
-	switch f.config.Driver {
-	case "memory":
-		memConfig := MemoryCacheConfig{
-			NumCounters: f.config.Memory.NumCounters,
-			MaxCost:     f.config.Memory.MaxCost,
-			BufferItems: f.config.Memory.BufferItems,
-		}
-		return NewMemoryCache(memConfig)
-	case "redis":
-		redisCacheConfig := RedisCacheConfig{
-			KeyPrefix:  f.config.Redis.KeyPrefix,
-			DefaultTTL: f.config.Redis.DefaultTTL,
-		}
-		return NewRedisCache(redisCacheConfig, f.redis)
-	case "multi":
-		memConfig := MemoryCacheConfig{
-			NumCounters: f.config.Memory.NumCounters,
-			MaxCost:     f.config.Memory.MaxCost,
-			BufferItems: f.config.Memory.BufferItems,
-		}
-		l1, err := NewMemoryCache(memConfig)
-		if err != nil {
-			return nil, err
-		}
-
-		redisCacheConfig := RedisCacheConfig{
-			KeyPrefix:  f.config.Redis.KeyPrefix,
-			DefaultTTL: f.config.Redis.DefaultTTL,
-		}
-		l2, err := NewRedisCache(redisCacheConfig, f.redis)
-		if err != nil {
-			return nil, err
-		}
-
-		return NewMultiCache(l1, l2), nil
-	default:
-		return nil, fmt.Errorf("unsupported cache driver: %s", f.config.Driver)
+	c, err := pkgcache.NewFactory(factoryCfg).Create()
+	if err != nil {
+		return nil, err
 	}
+	return NewManager(c), nil
 }

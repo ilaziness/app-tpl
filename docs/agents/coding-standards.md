@@ -50,5 +50,6 @@
 
 ## 缓存和事件系统
 
-- **缓存**：内存（Ristretto）、Redis、多级缓存 — 示例见 `internal/cache/example_test.go`
+- **缓存原语**（`pkg/cache`）：通用 Cache 接口、Memory/Redis/Multi/Nop 实现、Factory、errors、KeyGenerator — 自包含，不依赖 internal/config — 示例见 `pkg/cache/example_test.go`
+- **业务缓存管理**（`internal/cache`）：KeySpec（Prefix + TTL）定义业务键，Manager 提供按实体的 typed Get/Set/Delete 方法（如 `GetUserByID/SetUserByID/DelUserByID`），内部用泛型 helper 统一处理 Memory 直存与 Redis JSON 反序列化 — 按业务实体拆文件（`user.go` 等），KeySpec 与 typed 方法同文件存放 — 示例见 `internal/cache/user_test.go`
 - **事件总线**：发布/订阅，支持同步/异步、优先级、通配符 — 示例见 `internal/event/example_test.go`

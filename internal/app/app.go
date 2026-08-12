@@ -31,7 +31,7 @@ type App struct {
 	logger *logger.Logger
 
 	db       *database.DB
-	cache    cache.Cache
+	cacheMgr *cache.Manager
 	eventBus event.EventBus
 	tracer   *tracing.Tracer
 	metrics  *metrics.Metrics
