@@ -9,6 +9,7 @@ import (
 	"github.com/ilaziness/app-tpl/internal/logger"
 	"github.com/ilaziness/app-tpl/internal/metrics"
 	"github.com/ilaziness/app-tpl/internal/tracing"
+	pkgevent "github.com/ilaziness/app-tpl/pkg/event"
 	"go.uber.org/zap"
 )
 
@@ -52,7 +53,7 @@ func (a *App) wireInfra() error {
 		OnStop: func(ctx context.Context) error { return a.cacheMgr.Close() },
 	})
 
-	a.eventBus = event.NewEventBusWithLogger(a.log)
+	a.eventBus = pkgevent.NewEventBusWithLogger(a.log)
 	a.registerBuiltinEventListeners()
 	a.addHook(Hook{
 		Name:   "event_bus",
@@ -75,7 +76,7 @@ func (a *App) wireInfra() error {
 }
 
 func (a *App) registerBuiltinEventListeners() {
-	if err := a.eventBus.Subscribe(event.EventAppStopped, func(ctx context.Context, ev *event.Event) error {
+	if _, err := a.eventBus.Subscribe(event.EventAppStopped, func(ctx context.Context, ev *pkgevent.Event) error {
 		if payload, ok := ev.Payload.(*event.AppStoppedPayload); ok {
 			a.log.Info("Application stopped",
 				zap.Duration("uptime", payload.Uptime),

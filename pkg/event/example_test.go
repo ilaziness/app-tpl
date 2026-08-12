@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/ilaziness/app-tpl/internal/event"
+	"github.com/ilaziness/app-tpl/pkg/event"
 )
 
 // ExampleEventBus 事件总线基本使用示例
@@ -15,7 +15,7 @@ func ExampleEventBus() {
 	defer bus.Close()
 
 	// 订阅事件
-	err := bus.Subscribe("user.created", func(ctx context.Context, e *event.Event) error {
+	_, err := bus.Subscribe("user.created", func(ctx context.Context, e *event.Event) error {
 		if payload, ok := e.Payload.(string); ok {
 			fmt.Printf("User created: %s\n", payload)
 		}
@@ -48,7 +48,7 @@ func ExampleEventBus_async() {
 	received := make(chan string, 1)
 
 	// 异步订阅：handler 会在 goroutine 中执行，不会阻塞 Publish
-	err := bus.Subscribe("notification.sent", func(ctx context.Context, e *event.Event) error {
+	_, err := bus.Subscribe("notification.sent", func(ctx context.Context, e *event.Event) error {
 		if msg, ok := e.Payload.(string); ok {
 			received <- msg
 		}
@@ -86,7 +86,7 @@ func ExampleEventBus_wildcard() {
 	eventCount := 0
 
 	// 通配符订阅：匹配所有 user.* 事件
-	err := bus.SubscribeWildcard("user.*", func(ctx context.Context, e *event.Event) error {
+	_, err := bus.SubscribeWildcard("user.*", func(ctx context.Context, e *event.Event) error {
 		eventCount++
 		return nil
 	})
@@ -117,7 +117,7 @@ func ExampleEventBus_priority() {
 	var executionOrder []string
 
 	// 低优先级订阅者
-	_ = bus.Subscribe("important.event", func(ctx context.Context, e *event.Event) error {
+	_, _ = bus.Subscribe("important.event", func(ctx context.Context, e *event.Event) error {
 		executionOrder = append(executionOrder, "low")
 		return nil
 	}, event.SubscriptionOptions{
@@ -125,7 +125,7 @@ func ExampleEventBus_priority() {
 	})
 
 	// 高优先级订阅者
-	_ = bus.Subscribe("important.event", func(ctx context.Context, e *event.Event) error {
+	_, _ = bus.Subscribe("important.event", func(ctx context.Context, e *event.Event) error {
 		executionOrder = append(executionOrder, "high")
 		return nil
 	}, event.SubscriptionOptions{
@@ -133,7 +133,7 @@ func ExampleEventBus_priority() {
 	})
 
 	// 普通优先级订阅者
-	_ = bus.Subscribe("important.event", func(ctx context.Context, e *event.Event) error {
+	_, _ = bus.Subscribe("important.event", func(ctx context.Context, e *event.Event) error {
 		executionOrder = append(executionOrder, "normal")
 		return nil
 	}, event.SubscriptionOptions{
@@ -158,7 +158,7 @@ func ExampleEventBus_withContext() {
 	defer bus.Close()
 
 	// 订阅一个会检查 context 的 handler
-	err := bus.Subscribe("timeout.event", func(ctx context.Context, e *event.Event) error {
+	_, err := bus.Subscribe("timeout.event", func(ctx context.Context, e *event.Event) error {
 		select {
 		case <-ctx.Done():
 			fmt.Println("Context cancelled:", ctx.Err())
@@ -193,19 +193,19 @@ func ExampleEventBus_multipleHandlers() {
 	defer bus.Close()
 
 	// 第一个订阅者：记录日志
-	_ = bus.Subscribe("order.placed", func(ctx context.Context, e *event.Event) error {
+	_, _ = bus.Subscribe("order.placed", func(ctx context.Context, e *event.Event) error {
 		fmt.Println("[Logger] Order placed event received")
 		return nil
 	})
 
 	// 第二个订阅者：发送通知
-	_ = bus.Subscribe("order.placed", func(ctx context.Context, e *event.Event) error {
+	_, _ = bus.Subscribe("order.placed", func(ctx context.Context, e *event.Event) error {
 		fmt.Println("[Notifier] Sending notification for order")
 		return nil
 	})
 
 	// 第三个订阅者：更新统计
-	_ = bus.Subscribe("order.placed", func(ctx context.Context, e *event.Event) error {
+	_, _ = bus.Subscribe("order.placed", func(ctx context.Context, e *event.Event) error {
 		fmt.Println("[Analytics] Updating order statistics")
 		return nil
 	})

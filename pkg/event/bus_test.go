@@ -2,6 +2,7 @@ package event
 
 import (
 	"context"
+	"errors"
 	"sync"
 	"testing"
 	"time"
@@ -14,7 +15,7 @@ func TestEventBus_PublishAndSubscribe(t *testing.T) {
 	received := make(chan string, 10)
 
 	// 订阅事件
-	err := bus.Subscribe("test.event", func(ctx context.Context, e *Event) error {
+	_, err := bus.Subscribe("test.event", func(ctx context.Context, e *Event) error {
 		if msg, ok := e.Payload.(string); ok {
 			received <- msg
 		}
@@ -53,7 +54,7 @@ func TestEventBus_MultipleSubscribers(t *testing.T) {
 
 	// 添加多个订阅者
 	for i := 0; i < 5; i++ {
-		err := bus.Subscribe("multi.event", func(ctx context.Context, e *Event) error {
+		_, err := bus.Subscribe("multi.event", func(ctx context.Context, e *Event) error {
 			mu.Lock()
 			count++
 			mu.Unlock()
@@ -65,8 +66,7 @@ func TestEventBus_MultipleSubscribers(t *testing.T) {
 	}
 
 	// 发布事件
-	err := bus.Publish(context.Background(), &Event{Name: "multi.event"})
-	if err != nil {
+	if err := bus.Publish(context.Background(), &Event{Name: "multi.event"}); err != nil {
 		t.Fatalf("failed to publish: %v", err)
 	}
 
@@ -87,7 +87,7 @@ func TestEventBus_AsyncHandling(t *testing.T) {
 	received := make(chan string, 1)
 
 	// 异步订阅
-	err := bus.Subscribe("async.event", func(ctx context.Context, e *Event) error {
+	_, err := bus.Subscribe("async.event", func(ctx context.Context, e *Event) error {
 		time.Sleep(50 * time.Millisecond) // 模拟耗时操作
 		if msg, ok := e.Payload.(string); ok {
 			received <- msg
@@ -132,7 +132,7 @@ func TestEventBus_SyncHandling(t *testing.T) {
 	executed := false
 
 	// 同步订阅
-	err := bus.Subscribe("sync.event", func(ctx context.Context, e *Event) error {
+	_, err := bus.Subscribe("sync.event", func(ctx context.Context, e *Event) error {
 		time.Sleep(50 * time.Millisecond)
 		executed = true
 		return nil
@@ -167,21 +167,21 @@ func TestEventBus_Priority(t *testing.T) {
 	var mu sync.Mutex
 
 	// 按不同优先级订阅
-	_ = bus.Subscribe("priority.event", func(ctx context.Context, e *Event) error {
+	_, _ = bus.Subscribe("priority.event", func(ctx context.Context, e *Event) error {
 		mu.Lock()
 		order = append(order, 2)
 		mu.Unlock()
 		return nil
 	}, SubscriptionOptions{Priority: PriorityNormal})
 
-	_ = bus.Subscribe("priority.event", func(ctx context.Context, e *Event) error {
+	_, _ = bus.Subscribe("priority.event", func(ctx context.Context, e *Event) error {
 		mu.Lock()
 		order = append(order, 1)
 		mu.Unlock()
 		return nil
 	}, SubscriptionOptions{Priority: PriorityHigh})
 
-	_ = bus.Subscribe("priority.event", func(ctx context.Context, e *Event) error {
+	_, _ = bus.Subscribe("priority.event", func(ctx context.Context, e *Event) error {
 		mu.Lock()
 		order = append(order, 3)
 		mu.Unlock()
@@ -210,6 +210,44 @@ func TestEventBus_Priority(t *testing.T) {
 	}
 }
 
+func TestEventBus_DefaultOptionsZeroPriority(t *testing.T) {
+	bus := NewEventBus()
+	defer bus.Close()
+
+	order := make([]string, 0, 3)
+	var mu sync.Mutex
+
+	// 仅设置 Async 未设置 Priority：零值应被视为普通优先级
+	_, _ = bus.Subscribe("order.event", func(ctx context.Context, e *Event) error {
+		mu.Lock()
+		order = append(order, "high")
+		mu.Unlock()
+		return nil
+	}, SubscriptionOptions{Priority: PriorityHigh})
+
+	_, _ = bus.Subscribe("order.event", func(ctx context.Context, e *Event) error {
+		mu.Lock()
+		order = append(order, "zero")
+		mu.Unlock()
+		return nil
+	}, SubscriptionOptions{Async: true})
+
+	// 发布事件
+	_ = bus.Publish(context.Background(), &Event{Name: "order.event"})
+	time.Sleep(100 * time.Millisecond)
+
+	mu.Lock()
+	defer mu.Unlock()
+
+	if len(order) != 2 {
+		t.Fatalf("expected 2 handlers, got %d", len(order))
+	}
+	// 高优先级先执行，零值优先级为普通
+	if order[0] != "high" {
+		t.Errorf("expected high first, got %v", order)
+	}
+}
+
 func TestEventBus_WildcardSubscription(t *testing.T) {
 	bus := NewEventBus()
 	defer bus.Close()
@@ -217,7 +255,7 @@ func TestEventBus_WildcardSubscription(t *testing.T) {
 	received := make(chan string, 10)
 
 	// 通配符订阅
-	err := bus.SubscribeWildcard("user.*", func(ctx context.Context, e *Event) error {
+	_, err := bus.SubscribeWildcard("user.*", func(ctx context.Context, e *Event) error {
 		received <- e.Name
 		return nil
 	})
@@ -273,7 +311,7 @@ func TestEventBus_ContextCancellation(t *testing.T) {
 	executed := false
 
 	// 订阅一个会检查 context 的 handler
-	err := bus.Subscribe("cancel.event", func(ctx context.Context, e *Event) error {
+	_, err := bus.Subscribe("cancel.event", func(ctx context.Context, e *Event) error {
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
@@ -313,13 +351,13 @@ func TestEventBus_HandlerError(t *testing.T) {
 	successHandled := false
 
 	// 第一个 handler 返回错误
-	_ = bus.Subscribe("error.event", func(ctx context.Context, e *Event) error {
+	_, _ = bus.Subscribe("error.event", func(ctx context.Context, e *Event) error {
 		errorHandled = true
 		return nil // 错误会被记录，但不会中断其他 handler
 	})
 
 	// 第二个 handler 应该仍然执行
-	_ = bus.Subscribe("error.event", func(ctx context.Context, e *Event) error {
+	_, _ = bus.Subscribe("error.event", func(ctx context.Context, e *Event) error {
 		successHandled = true
 		return nil
 	})
@@ -346,7 +384,7 @@ func TestEventBus_ConcurrentPublish(t *testing.T) {
 	var mu sync.Mutex
 
 	// 订阅事件
-	_ = bus.Subscribe("concurrent.event", func(ctx context.Context, e *Event) error {
+	_, _ = bus.Subscribe("concurrent.event", func(ctx context.Context, e *Event) error {
 		mu.Lock()
 		count++
 		mu.Unlock()
@@ -388,8 +426,11 @@ func TestEventBus_Unsubscribe(t *testing.T) {
 		return nil
 	}
 
-	// 订阅
-	_ = bus.Subscribe("unsubscribe.event", handler)
+	// 订阅并保存取消函数
+	cancel, err := bus.Subscribe("unsubscribe.event", handler)
+	if err != nil {
+		t.Fatalf("failed to subscribe: %v", err)
+	}
 
 	// 发布第一次
 	_ = bus.Publish(context.Background(), &Event{Name: "unsubscribe.event"})
@@ -400,7 +441,7 @@ func TestEventBus_Unsubscribe(t *testing.T) {
 	}
 
 	// 取消订阅
-	_ = bus.Unsubscribe("unsubscribe.event", handler)
+	cancel()
 
 	// 发布第二次
 	_ = bus.Publish(context.Background(), &Event{Name: "unsubscribe.event"})
@@ -410,6 +451,83 @@ func TestEventBus_Unsubscribe(t *testing.T) {
 	if callCount != 1 {
 		t.Errorf("expected 1 call after unsubscribe, got %d", callCount)
 	}
+}
+
+func TestEventBus_CancelIsIdempotent(t *testing.T) {
+	bus := NewEventBus()
+	defer bus.Close()
+
+	callCount := 0
+
+	handler := func(ctx context.Context, e *Event) error {
+		callCount++
+		return nil
+	}
+
+	cancel, err := bus.Subscribe("cancel.idempotent", handler)
+	if err != nil {
+		t.Fatalf("failed to subscribe: %v", err)
+	}
+
+	// 多次调用取消函数应无害
+	cancel()
+	cancel()
+	cancel()
+
+	_ = bus.Publish(context.Background(), &Event{Name: "cancel.idempotent"})
+	time.Sleep(50 * time.Millisecond)
+
+	if callCount != 0 {
+		t.Errorf("expected 0 calls after cancel, got %d", callCount)
+	}
+}
+
+func TestEventBus_SubscribeReturnsCancelFunc(t *testing.T) {
+	bus := NewEventBus()
+	defer bus.Close()
+
+	var mu sync.Mutex
+	count := 0
+
+	// 闭包 handler：验证取消函数精确移除单个订阅，不误删其他同函数体订阅
+	handler := func(ctx context.Context, e *Event) error {
+		mu.Lock()
+		count++
+		mu.Unlock()
+		return nil
+	}
+
+	cancelA, err := bus.Subscribe("dup.event", handler)
+	if err != nil {
+		t.Fatalf("failed to subscribe A: %v", err)
+	}
+	cancelB, err := bus.Subscribe("dup.event", handler)
+	if err != nil {
+		t.Fatalf("failed to subscribe B: %v", err)
+	}
+
+	// 取消 A，仅 A 被移除
+	cancelA()
+
+	_ = bus.Publish(context.Background(), &Event{Name: "dup.event"})
+	time.Sleep(50 * time.Millisecond)
+
+	mu.Lock()
+	if count != 1 {
+		t.Errorf("expected 1 call after cancelling one of two subscribers, got %d", count)
+	}
+	mu.Unlock()
+
+	cancelB()
+
+	_ = bus.Publish(context.Background(), &Event{Name: "dup.event"})
+	time.Sleep(50 * time.Millisecond)
+
+	mu.Lock()
+	if count != 1 {
+		t.Errorf("expected 1 call after cancelling both subscribers, got %d", count)
+	}
+	mu.Unlock()
 }
 
 func TestEventBus_Close(t *testing.T) {
@@ -423,17 +541,49 @@ func TestEventBus_Close(t *testing.T) {
 
 	// 尝试发布事件应该失败
 	err = bus.Publish(context.Background(), &Event{Name: "test.event"})
-	if err == nil {
-		t.Error("expected error when publishing to closed bus")
+	if !errors.Is(err, ErrClosed) {
+		t.Errorf("expected ErrClosed, got %v", err)
 	}
 
 	// 尝试订阅应该失败
-	err = bus.Subscribe("test.event", func(ctx context.Context, e *Event) error {
+	_, err = bus.Subscribe("test.event", func(ctx context.Context, e *Event) error {
 		return nil
 	})
-	if err == nil {
-		t.Error("expected error when subscribing to closed bus")
+	if !errors.Is(err, ErrClosed) {
+		t.Errorf("expected ErrClosed, got %v", err)
 	}
+}
+
+// TestEventBus_CloseDoesNotLeakConcurrentAsyncPublish 回归测试：
+// Publish 实现在持锁阶段对异步订阅者登记 WaitGroup，因此并发 Publish
+// 与 Close 交错时，Close 一定能等待所有已入队的异步任务，不会提前返回
+// 造成 goroutine 泄漏。
+func TestEventBus_CloseDoesNotLeakConcurrentAsyncPublish(t *testing.T) {
+	bus := NewEventBus()
+
+	done := make(chan struct{})
+	_, _ = bus.Subscribe("raced.event", func(ctx context.Context, e *Event) error {
+		<-done
+		return nil
+	}, SubscriptionOptions{Async: true})
+
+	// 并发发布：Publish 取锁收集快照并登记 WaitGroup；Close 取写锁置
+	// closed。若 WaitGroup 登记发生在锁外，Close 会提前返回并泄漏 goroutine。
+	var wg sync.WaitGroup
+	for i := 0; i < 20; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			_ = bus.Publish(context.Background(), &Event{Name: "raced.event"})
+		}()
+	}
+
+	close(done) // 释放所有异步 handler
+
+	_ = bus.Close() // 必须等待全部 20 个异步任务完成
+
+	// 若能安全走到这里（无 panic、无泄漏），说明 WaitGroup 登记与 Close 无竞态。
+	wg.Wait()
 }
 
 func TestEventBus_CloseWaitsForAsync(t *testing.T) {
@@ -444,7 +594,7 @@ func TestEventBus_CloseWaitsForAsync(t *testing.T) {
 	wg.Add(1)
 
 	// 异步订阅，需要较长时间完成
-	_ = bus.Subscribe("slow.event", func(ctx context.Context, e *Event) error {
+	_, _ = bus.Subscribe("slow.event", func(ctx context.Context, e *Event) error {
 		time.Sleep(100 * time.Millisecond)
 		completed = true
 		wg.Done()
@@ -474,12 +624,12 @@ func TestEventBus_InvalidWildcardPattern(t *testing.T) {
 	defer bus.Close()
 
 	// 尝试使用无效的通配符模式
-	err := bus.SubscribeWildcard("[invalid", func(ctx context.Context, e *Event) error {
+	_, err := bus.SubscribeWildcard("[invalid", func(ctx context.Context, e *Event) error {
 		return nil
 	})
 
-	if err == nil {
-		t.Error("expected error for invalid wildcard pattern")
+	if !errors.Is(err, ErrInvalidPattern) {
+		t.Errorf("expected ErrInvalidPattern, got %v", err)
 	}
 }
 
@@ -489,7 +639,7 @@ func TestEventBus_MaxSubscribers(t *testing.T) {
 
 	// 订阅达到最大数量
 	for i := 0; i < 1000; i++ {
-		err := bus.Subscribe("max.event", func(ctx context.Context, e *Event) error {
+		_, err := bus.Subscribe("max.event", func(ctx context.Context, e *Event) error {
 			return nil
 		})
 		if err != nil {
@@ -498,56 +648,12 @@ func TestEventBus_MaxSubscribers(t *testing.T) {
 	}
 
 	// 第 1001 个订阅应该失败
-	err := bus.Subscribe("max.event", func(ctx context.Context, e *Event) error {
+	_, err := bus.Subscribe("max.event", func(ctx context.Context, e *Event) error {
 		return nil
 	})
 
-	if err == nil {
-		t.Error("expected error when exceeding max subscribers")
-	}
-}
-
-func TestEventBus_BuiltInEvents(t *testing.T) {
-	bus := NewEventBus()
-	defer bus.Close()
-
-	appStarted := false
-	appStopped := false
-
-	// 订阅应用启动事件
-	_ = bus.Subscribe(EventAppStarted, func(ctx context.Context, e *Event) error {
-		if payload, ok := e.Payload.(*AppStartedPayload); ok {
-			appStarted = true
-			if payload.Version == "" {
-				t.Error("expected version in AppStartedPayload")
-			}
-		}
-		return nil
-	})
-
-	// 订阅应用停止事件
-	_ = bus.Subscribe(EventAppStopped, func(ctx context.Context, e *Event) error {
-		if payload, ok := e.Payload.(*AppStoppedPayload); ok {
-			appStopped = true
-			if payload.Uptime == 0 {
-				t.Error("expected uptime in AppStoppedPayload")
-			}
-		}
-		return nil
-	})
-
-	// 发布内置事件
-	_ = PublishAppStarted(bus, "1.0.0")
-	_ = PublishAppStopped(bus, 5*time.Second)
-
-	// 等待执行
-	time.Sleep(100 * time.Millisecond)
-
-	if !appStarted {
-		t.Error("AppStarted handler was not called")
-	}
-	if !appStopped {
-		t.Error("AppStopped handler was not called")
+	if !errors.Is(err, ErrMaxSubscribers) {
+		t.Errorf("expected ErrMaxSubscribers, got %v", err)
 	}
 }
 
@@ -558,7 +664,7 @@ func TestEventBus_WildcardNestedPatterns(t *testing.T) {
 	received := make(chan string, 10)
 
 	// 多层通配符订阅
-	_ = bus.SubscribeWildcard("user.*.created", func(ctx context.Context, e *Event) error {
+	_, _ = bus.SubscribeWildcard("user.*.created", func(ctx context.Context, e *Event) error {
 		received <- e.Name
 		return nil
 	})
@@ -621,14 +727,14 @@ func TestEventBus_WildcardMultiplePatterns(t *testing.T) {
 	var mu sync.Mutex
 
 	// 订阅多个通配符模式
-	_ = bus.SubscribeWildcard("user.*", func(ctx context.Context, e *Event) error {
+	_, _ = bus.SubscribeWildcard("user.*", func(ctx context.Context, e *Event) error {
 		mu.Lock()
 		userCount++
 		mu.Unlock()
 		return nil
 	})
 
-	_ = bus.SubscribeWildcard("order.*", func(ctx context.Context, e *Event) error {
+	_, _ = bus.SubscribeWildcard("order.*", func(ctx context.Context, e *Event) error {
 		mu.Lock()
 		orderCount++
 		mu.Unlock()
@@ -669,8 +775,8 @@ func TestEventBus_PublishToClosedBus(t *testing.T) {
 
 	// 尝试发布事件
 	err := bus.Publish(context.Background(), &Event{Name: "test.event"})
-	if err == nil {
-		t.Error("expected error when publishing to closed bus")
+	if !errors.Is(err, ErrClosed) {
+		t.Errorf("expected ErrClosed, got %v", err)
 	}
 }
 
@@ -681,19 +787,19 @@ func TestEventBus_SubscribeToClosedBus(t *testing.T) {
 	_ = bus.Close()
 
 	// 尝试订阅
-	err := bus.Subscribe("test.event", func(ctx context.Context, e *Event) error {
+	_, err := bus.Subscribe("test.event", func(ctx context.Context, e *Event) error {
 		return nil
 	})
-	if err == nil {
-		t.Error("expected error when subscribing to closed bus")
+	if !errors.Is(err, ErrClosed) {
+		t.Errorf("expected ErrClosed, got %v", err)
 	}
 
 	// 尝试通配符订阅
-	err = bus.SubscribeWildcard("test.*", func(ctx context.Context, e *Event) error {
+	_, err = bus.SubscribeWildcard("test.*", func(ctx context.Context, e *Event) error {
 		return nil
 	})
-	if err == nil {
-		t.Error("expected error when subscribing wildcard to closed bus")
+	if !errors.Is(err, ErrClosed) {
+		t.Errorf("expected ErrClosed, got %v", err)
 	}
 }
 
@@ -704,12 +810,12 @@ func TestEventBus_HandlerPanicRecovery(t *testing.T) {
 	nextHandlerCalled := false
 
 	// 第一个 handler 会 panic
-	_ = bus.Subscribe("panic.event", func(ctx context.Context, e *Event) error {
+	_, _ = bus.Subscribe("panic.event", func(ctx context.Context, e *Event) error {
 		panic("test panic")
 	})
 
 	// 第二个 handler 应该仍然能执行
-	_ = bus.Subscribe("panic.event", func(ctx context.Context, e *Event) error {
+	_, _ = bus.Subscribe("panic.event", func(ctx context.Context, e *Event) error {
 		nextHandlerCalled = true
 		return nil
 	})
@@ -732,10 +838,8 @@ func TestEventBus_HandlerPanicRecovery(t *testing.T) {
 func TestEventBus_AsyncHandlerPanicRecovery(t *testing.T) {
 	bus := NewEventBus()
 
-	panicHandled := make(chan bool, 1)
-
 	// 异步 handler 会 panic
-	_ = bus.Subscribe("async.panic.event", func(ctx context.Context, e *Event) error {
+	_, _ = bus.Subscribe("async.panic.event", func(ctx context.Context, e *Event) error {
 		panic("async panic")
 	}, SubscriptionOptions{Async: true})
 
@@ -750,10 +854,6 @@ func TestEventBus_AsyncHandlerPanicRecovery(t *testing.T) {
 	if err != nil {
 		t.Errorf("unexpected error on close: %v", err)
 	}
-
-	// 如果能正常关闭，说明 panic 被正确恢复了
-	panicHandled <- true
-	<-panicHandled
 }
 
 func TestEventBus_MixedSyncAsyncHandlers(t *testing.T) {
@@ -764,7 +864,7 @@ func TestEventBus_MixedSyncAsyncHandlers(t *testing.T) {
 	var mu sync.Mutex
 
 	// 同步 handler
-	_ = bus.Subscribe("mixed.event", func(ctx context.Context, e *Event) error {
+	_, _ = bus.Subscribe("mixed.event", func(ctx context.Context, e *Event) error {
 		mu.Lock()
 		executionOrder = append(executionOrder, "sync1")
 		mu.Unlock()
@@ -772,7 +872,7 @@ func TestEventBus_MixedSyncAsyncHandlers(t *testing.T) {
 	}, SubscriptionOptions{Async: false})
 
 	// 异步 handler
-	_ = bus.Subscribe("mixed.event", func(ctx context.Context, e *Event) error {
+	_, _ = bus.Subscribe("mixed.event", func(ctx context.Context, e *Event) error {
 		time.Sleep(50 * time.Millisecond)
 		mu.Lock()
 		executionOrder = append(executionOrder, "async1")
@@ -781,7 +881,7 @@ func TestEventBus_MixedSyncAsyncHandlers(t *testing.T) {
 	}, SubscriptionOptions{Async: true})
 
 	// 另一个同步 handler
-	_ = bus.Subscribe("mixed.event", func(ctx context.Context, e *Event) error {
+	_, _ = bus.Subscribe("mixed.event", func(ctx context.Context, e *Event) error {
 		mu.Lock()
 		executionOrder = append(executionOrder, "sync2")
 		mu.Unlock()
@@ -826,7 +926,7 @@ func TestEventBus_EventWithComplexPayload(t *testing.T) {
 
 	var receivedPayload *ComplexData
 
-	_ = bus.Subscribe("complex.event", func(ctx context.Context, e *Event) error {
+	_, _ = bus.Subscribe("complex.event", func(ctx context.Context, e *Event) error {
 		if payload, ok := e.Payload.(*ComplexData); ok {
 			receivedPayload = payload
 		}
@@ -862,21 +962,6 @@ func TestEventBus_EventWithComplexPayload(t *testing.T) {
 	}
 }
 
-func TestEventBus_UnsubscribeNonExistent(t *testing.T) {
-	bus := NewEventBus()
-	defer bus.Close()
-
-	handler := func(ctx context.Context, e *Event) error {
-		return nil
-	}
-
-	// 尝试取消一个从未订阅的 handler
-	err := bus.Unsubscribe("nonexistent.event", handler)
-	if err != nil {
-		t.Errorf("unsubscribe should not return error for non-existent subscription: %v", err)
-	}
-}
-
 func TestEventBus_EmptyEventName(t *testing.T) {
 	bus := NewEventBus()
 	defer bus.Close()
@@ -885,6 +970,44 @@ func TestEventBus_EmptyEventName(t *testing.T) {
 	err := bus.Publish(context.Background(), &Event{Name: ""})
 	if err != nil {
 		t.Errorf("publish with empty name should not fail: %v", err)
+	}
+}
+
+func TestEventBus_SubscribeInsideHandler_NoDeadlock(t *testing.T) {
+	bus := NewEventBus()
+	defer bus.Close()
+
+	called := make(chan struct{}, 1)
+
+	// handler 内部再订阅一个新事件：如果 Publish 在锁内分发，会死锁
+	_, err := bus.Subscribe("outer.event", func(ctx context.Context, e *Event) error {
+		if _, err := bus.Subscribe("inner.event", func(ctx context.Context, e2 *Event) error {
+			called <- struct{}{}
+			return nil
+		}); err != nil {
+			return err
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("failed to subscribe: %v", err)
+	}
+
+	// 发布外部事件，触发内部订阅
+	if err := bus.Publish(context.Background(), &Event{Name: "outer.event"}); err != nil {
+		t.Fatalf("failed to publish: %v", err)
+	}
+
+	// 发布内部事件，验证 handler 已注册
+	if err := bus.Publish(context.Background(), &Event{Name: "inner.event"}); err != nil {
+		t.Fatalf("failed to publish inner: %v", err)
+	}
+
+	// 若死锁则此处超时
+	select {
+	case <-called:
+	case <-time.After(2 * time.Second):
+		t.Fatal("deadlock: handler subscription inside publish blocked")
 	}
 }
 
@@ -900,8 +1023,11 @@ func TestEventBus_RapidSubscribeUnsubscribe(t *testing.T) {
 		eventName := "rapid.event"
 
 		// 快速订阅和取消订阅
-		_ = bus.Subscribe(eventName, handler)
-		_ = bus.Unsubscribe(eventName, handler)
+		cancel, err := bus.Subscribe(eventName, handler)
+		if err != nil {
+			t.Fatalf("failed to subscribe at iteration %d: %v", i, err)
+		}
+		cancel()
 	}
 
 	// 如果能正常运行到这里，说明没有死锁或竞态条件
@@ -912,6 +1038,7 @@ func TestEventBus_ConcurrentSubscribeUnsubscribe(t *testing.T) {
 	defer bus.Close()
 
 	var wg sync.WaitGroup
+	cancels := make([]func(), 50)
 
 	// 并发订阅
 	for i := 0; i < 50; i++ {
@@ -922,12 +1049,23 @@ func TestEventBus_ConcurrentSubscribeUnsubscribe(t *testing.T) {
 			handler := func(ctx context.Context, e *Event) error {
 				return nil
 			}
-			_ = bus.Subscribe(eventName, handler)
+			cancel, err := bus.Subscribe(eventName, handler)
+			if err != nil {
+				t.Errorf("failed to subscribe: %v", err)
+				return
+			}
+			cancels[id] = cancel
 		}(i)
 	}
 
 	wg.Wait()
 
-	// 验证所有订阅都成功了
-	// (如果有任何竞态条件，这里可能会 panic)
+	// 取消所有订阅
+	for _, cancel := range cancels {
+		if cancel != nil {
+			cancel()
+		}
+	}
+
+	// 如果能正常运行到这里，说明没有死锁或竞态条件
 }

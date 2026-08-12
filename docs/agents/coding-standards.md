@@ -52,4 +52,5 @@
 
 - **缓存原语**（`pkg/cache`）：通用 Cache 接口、Memory/Redis/Multi/Nop 实现、Factory、errors、KeyGenerator — 自包含，不依赖 internal/config — 示例见 `pkg/cache/example_test.go`
 - **业务缓存管理**（`internal/cache`）：KeySpec（Prefix + TTL）定义业务键，Manager 提供按实体的 typed Get/Set/Delete 方法（如 `GetUserByID/SetUserByID/DelUserByID`），内部用泛型 helper 统一处理 Memory 直存与 Redis JSON 反序列化 — 按业务实体拆文件（`user.go` 等），KeySpec 与 typed 方法同文件存放 — 示例见 `internal/cache/user_test.go`
-- **事件总线**：发布/订阅，支持同步/异步、优先级、通配符 — 示例见 `internal/event/example_test.go`
+- **事件机制**（`pkg/event`）：通用事件总线 — 发布/订阅、同步/异步、优先级、通配符、取消订阅函数、哨兵错误 — 自包含，不依赖 internal — 示例见 `pkg/event/example_test.go`
+- **业务事件**（`internal/event`）：只放业务相关事件定义（事件名常量、payload、发布函数），机制在 `pkg/event`，按业务领域拆文件（如 `lifecycle.go`）

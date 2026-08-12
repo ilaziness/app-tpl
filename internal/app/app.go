@@ -21,6 +21,7 @@ import (
 	"github.com/ilaziness/app-tpl/internal/metrics"
 	"github.com/ilaziness/app-tpl/internal/server"
 	"github.com/ilaziness/app-tpl/internal/tracing"
+	pkgevent "github.com/ilaziness/app-tpl/pkg/event"
 	"go.uber.org/zap"
 )
 
@@ -32,7 +33,7 @@ type App struct {
 
 	db       *database.DB
 	cacheMgr *cache.Manager
-	eventBus event.EventBus
+	eventBus pkgevent.EventBus
 	tracer   *tracing.Tracer
 	metrics  *metrics.Metrics
 	jwtMgr   *auth.JWTManager
@@ -127,7 +128,7 @@ func (a *App) logStartup() error {
 	}
 	a.log.Info("Application started", fields...)
 
-	return event.PublishAppStarted(a.eventBus, a.cfg.App.Version)
+	return event.PublishAppStarted(context.Background(), a.eventBus, a.cfg.App.Version)
 }
 
 func (a *App) startServers(ctx context.Context, stop context.CancelFunc) error {
@@ -213,7 +214,7 @@ func (a *App) shutdown() error {
 
 	if a.appStarted && a.eventBus != nil {
 		uptime := time.Since(a.startTime)
-		if err := event.PublishAppStopped(a.eventBus, uptime); err != nil {
+		if err := event.PublishAppStopped(context.Background(), a.eventBus, uptime); err != nil {
 			if a.log != nil {
 				a.log.Error("Failed to publish app stopped event", zap.Error(err))
 			}

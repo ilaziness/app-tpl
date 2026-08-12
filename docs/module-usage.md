@@ -200,8 +200,9 @@ udp:
 - `internal/dto/` - 数据传输对象
 - `internal/config/` - 配置管理
 - `internal/database/` - 数据库连接
-- `internal/cache/` - 缓存
-- `internal/event/` - 事件系统
+- `internal/cache/` - 业务缓存
+- `internal/event/` - 业务事件定义与发布（事件机制在 `pkg/event`）
+- `pkg/event/` - 通用事件总线机制（发布/订阅、同步/异步、优先级、通配符、取消订阅）
 - `internal/logger/` - 日志
 - `internal/errors/` - 错误处理
 - `internal/response/` - 统一响应

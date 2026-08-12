@@ -15,7 +15,8 @@ app-tpl/
 ├── data/                            # 本地运行时数据（如 SQLite 文件）
 ├── test/                            # 集成测试
 ├── pkg/                             # 可复用的通用包（不依赖 internal）
-│   └── cache/                       # 通用缓存原语（Cache 接口、Memory/Redis/Multi/Nop 实现、Factory、errors、KeyGenerator）
+│   ├── cache/                       # 通用缓存原语（Cache 接口、Memory/Redis/Multi/Nop 实现、Factory、errors、KeyGenerator）
+│   └── event/                       # 通用事件总线机制（EventBus 接口、Event、EventHandler、实现、测试、示例）
 ├── internal/                        # 私有业务代码（外部不可导入）
 │   ├── app/                         # 应用组装与生命周期（手动 DI 唯一入口）
 │   ├── auth/                        # JWT 认证与令牌管理
@@ -26,7 +27,7 @@ app-tpl/
 │   ├── database/                    # 数据库连接与 Bun ORM 初始化
 │   ├── dto/                         # 请求/响应数据传输对象
 │   ├── errcode/                     # 业务错误码定义
-│   ├── event/                       # 发布/订阅事件总线
+│   ├── event/                       # 业务事件定义与发布（事件名常量、payload、发布函数；机制在 pkg/event）
 │   ├── handler/                     # 协议层请求处理器
 │   │   ├── http/                    # HTTP Handler（REST API）
 │   │   ├── tcp/                     # TCP 协议 Handler
