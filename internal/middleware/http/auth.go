@@ -20,14 +20,28 @@ const (
 // JWTAuth returns a middleware that validates JWT tokens from the Authorization header.
 // On success, the parsed claims are stored in the Gin context under ClaimsKey.
 // Paths in skipPaths are allowed through without authentication.
+//
+// skipPaths supports:
+//   - exact FullPath match (e.g. /health)
+//   - Gin wildcard route pattern (e.g. /swagger/*any)
+//   - prefix patterns ending with /* (e.g. /api/client/*)
+//   - prefix patterns ending with / (e.g. /api/client/)
 func JWTAuth(manager *auth.JWTManager, skipPaths ...string) gin.HandlerFunc {
-	skipSet := make(map[string]struct{}, len(skipPaths))
-	for _, p := range skipPaths {
-		skipSet[p] = struct{}{}
-	}
-
 	return func(c *gin.Context) {
-		if _, skip := skipSet[c.FullPath()]; skip {
+		fullPath := c.FullPath()
+		reqPath := c.Request.URL.Path
+		if pathSkipped(fullPath, reqPath, skipPaths) {
+			// 公开路径：如携带合法 Token，解析并写入 claims，供业务层读取但不强制认证
+			authHeader := c.GetHeader("Authorization")
+			if authHeader != "" {
+				parts := strings.SplitN(authHeader, " ", 2)
+				if len(parts) == 2 && strings.EqualFold(parts[0], "Bearer") {
+					claims, err := manager.ParseToken(parts[1])
+					if err == nil {
+						c.Set(ClaimsKey, claims)
+					}
+				}
+			}
 			c.Next()
 			return
 		}
@@ -63,6 +77,33 @@ func JWTAuth(manager *auth.JWTManager, skipPaths ...string) gin.HandlerFunc {
 	}
 }
 
+// pathSkipped reports whether the request path should skip JWT validation.
+func pathSkipped(fullPath, reqPath string, skipPaths []string) bool {
+	for _, p := range skipPaths {
+		if p == "" {
+			continue
+		}
+		if p == fullPath || p == reqPath {
+			return true
+		}
+		// Patterns with * : take prefix before first * (covers /swagger/*any and /api/client/*)
+		if i := strings.Index(p, "*"); i >= 0 {
+			prefix := p[:i]
+			if strings.HasPrefix(fullPath, prefix) || strings.HasPrefix(reqPath, prefix) {
+				return true
+			}
+			continue
+		}
+		// Directory prefix: /api/client/
+		if strings.HasSuffix(p, "/") {
+			if strings.HasPrefix(fullPath, p) || strings.HasPrefix(reqPath, p) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
 // GetClaims retrieves the JWT claims from the Gin context.
 // Returns nil if no claims are stored.
 func GetClaims(c *gin.Context) *auth.Claims {
@@ -79,6 +120,9 @@ func GetClaims(c *gin.Context) *auth.Claims {
 
 // RequireAuth returns a middleware that requires valid JWT access token claims in context.
 // Use on route groups that must not be accessed without authentication (e.g. admin API).
+//
+// When the global JWTAuth middleware is not registered (jwt.secret empty → jwtMgr nil),
+// this middleware will reject all requests. Enable JWT for protected admin routes.
 func RequireAuth() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		claims := GetClaims(c)
@@ -89,6 +133,30 @@ func RequireAuth() gin.HandlerFunc {
 		}
 		if claims.TokenType != auth.TokenTypeAccess {
 			response.Error(c, errcode.InvalidToken)
+			c.Abort()
+			return
+		}
+		c.Next()
+	}
+}
+
+// RequireSuperAdmin ensures JWT is present and the admin is an enabled super_admin.
+// check is called with gin.Context and admin ID from JWT claims.
+func RequireSuperAdmin(check func(c *gin.Context, adminID int64) error) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		claims := GetClaims(c)
+		if claims == nil {
+			response.Error(c, errcode.WithMessage(errcode.AuthFailed, "未认证"))
+			c.Abort()
+			return
+		}
+		if claims.TokenType != auth.TokenTypeAccess {
+			response.Error(c, errcode.InvalidToken)
+			c.Abort()
+			return
+		}
+		if err := check(c, claims.UserID); err != nil {
+			response.Error(c, err)
 			c.Abort()
 			return
 		}

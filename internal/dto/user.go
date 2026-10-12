@@ -5,18 +5,18 @@ import "time"
 
 // CreateUserRequest represents the request to create a user.
 type CreateUserRequest struct {
-	Email    string `json:"email" validate:"required,email"`
-	Password string `json:"password" validate:"required,min=6"`
-	Name     string `json:"name" validate:"required"`
-	Phone    string `json:"phone" validate:"omitempty"`
+	Email    string `json:"email" binding:"required,email"`
+	Password string `json:"password" binding:"required,min=6"`
+	Name     string `json:"name" binding:"required"`
+	Phone    string `json:"phone" binding:"omitempty"`
 }
 
 // UpdateUserRequest represents the request to update a user.
 type UpdateUserRequest struct {
-	ID     int64  `uri:"id" validate:"required"`
-	Name   string `json:"name" validate:"omitempty"`
-	Phone  string `json:"phone" validate:"omitempty"`
-	Status *int   `json:"status" validate:"omitempty,min=0,max=10"`
+	ID     int64  `uri:"id" binding:"required"`
+	Name   string `json:"name" binding:"omitempty"`
+	Phone  string `json:"phone" binding:"omitempty"`
+	Status *int   `json:"status" binding:"omitempty,min=0,max=10"`
 }
 
 // ListUsersRequest represents the request to list users.

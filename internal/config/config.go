@@ -23,18 +23,50 @@ var Cfg *Config
 
 // Config 应用根配置，对应 configs/config.yaml 及各模块段落。
 type Config struct {
-	App       AppConfig       `mapstructure:"app"`        // 应用基础信息
-	HTTP      HTTPConfig      `mapstructure:"http"`       // HTTP 服务
-	Log       LogConfig       `mapstructure:"log"`        // 日志
-	Database  DatabaseConfig  `mapstructure:"database"`   // 数据库（必填）
-	Redis     RedisConfig     `mapstructure:"redis"`      // Redis（可选）
-	Cache     CacheConfig     `mapstructure:"cache"`      // 缓存（可选）
-	JWT       JWTConfig       `mapstructure:"jwt"`        // JWT 认证
-	RateLimit RateLimitConfig `mapstructure:"rate_limit"` // 限流（可选）
-	TCP       TCPConfig       `mapstructure:"tcp"`        // TCP 服务（可选）
-	UDP       UDPConfig       `mapstructure:"udp"`        // UDP 服务（可选）
-	Tracing   TracingConfig   `mapstructure:"tracing"`    // 链路追踪（可选）
-	Metrics   MetricsConfig   `mapstructure:"metrics"`    // Prometheus 指标（可选）
+	App           AppConfig           `mapstructure:"app"`            // 应用基础信息
+	HTTP          HTTPConfig          `mapstructure:"http"`           // HTTP 服务
+	Log           LogConfig           `mapstructure:"log"`            // 日志
+	Database      DatabaseConfig      `mapstructure:"database"`       // 数据库（必填）
+	Redis         RedisConfig         `mapstructure:"redis"`          // Redis（可选）
+	Cache         CacheConfig         `mapstructure:"cache"`          // 缓存（可选）
+	JWT           JWTConfig           `mapstructure:"jwt"`            // JWT 认证
+	RateLimit     RateLimitConfig     `mapstructure:"rate_limit"`     // 限流（可选）
+	TCP           TCPConfig           `mapstructure:"tcp"`            // TCP 服务（可选）
+	UDP           UDPConfig           `mapstructure:"udp"`            // UDP 服务（可选）
+	Tracing       TracingConfig       `mapstructure:"tracing"`        // 链路追踪（可选）
+	Metrics       MetricsConfig       `mapstructure:"metrics"`        // Prometheus 指标（可选）
+	Scheduler     SchedulerConfig     `mapstructure:"scheduler"`      // 定时调度（可选）
+	Captcha       CaptchaConfig       `mapstructure:"captcha"`        // 验证码（可选，pkg 预留）
+	ObjectStorage ObjectStorageConfig `mapstructure:"object_storage"` // 对象存储（可选）
+	Payment       PaymentConfig       `mapstructure:"payment"`        // 支付抽象（可选）
+}
+
+// SchedulerConfig 定时任务调度配置。
+type SchedulerConfig struct {
+	Enabled         bool `mapstructure:"enabled"`           // 是否启用调度器
+	RegisterDemoJob bool `mapstructure:"register_demo_job"` // 是否注册无业务 demo Job
+}
+
+// CaptchaConfig 验证码配置骨架（pkg/captcha；业务在 wireHTTP 注入时再读取）。
+type CaptchaConfig struct {
+	Enabled bool `mapstructure:"enabled"` // 预留开关，当前未在 App 中强制初始化
+}
+
+// ObjectStorageConfig 对象存储配置骨架（pkg/objectstorage；业务接入时再接线）。
+type ObjectStorageConfig struct {
+	Enabled   bool   `mapstructure:"enabled"`    // 预留开关，当前未在 App 中强制初始化
+	Provider  string `mapstructure:"provider"`   // 驱动：aliyun | tencent | qiniu
+	Bucket    string `mapstructure:"bucket"`     // 存储桶
+	Region    string `mapstructure:"region"`     // 区域
+	Endpoint  string `mapstructure:"endpoint"`   // 可选自定义 API 端点
+	AccessKey string `mapstructure:"access_key"` // Access Key
+	SecretKey string `mapstructure:"secret_key"` // Secret Key
+	CDNDomain string `mapstructure:"cdn_domain"` // CDN 域名（PublicURL 使用）
+}
+
+// PaymentConfig 支付抽象配置骨架（pkg/payment；业务接入时再接线）。
+type PaymentConfig struct {
+	Enabled bool `mapstructure:"enabled"` // 预留开关，当前未在 App 中强制初始化
 }
 
 // AppConfig 应用基础配置。
@@ -100,15 +132,14 @@ type DatabaseConfig struct {
 
 // RedisConfig Redis 连接配置（enabled 为 false 时可忽略其余字段）。
 type RedisConfig struct {
-	Enabled            bool   `mapstructure:"enabled"`              // 是否启用 Redis
-	Host               string `mapstructure:"host"`                 // 主机（enabled 时必填）
-	Port               int    `mapstructure:"port"`                 // 端口，默认 6379
-	Password           string `mapstructure:"password"`             // 密码，可通过环境变量 REDIS_PASSWORD 覆盖
-	DB                 int    `mapstructure:"db"`                   // 逻辑库编号，范围 0-15
-	PoolSize           int    `mapstructure:"pool_size"`            // 连接池大小
-	MinIdleConns       int    `mapstructure:"min_idle_conns"`       // 最小空闲连接数
-	IdleTimeout        int    `mapstructure:"idle_timeout"`         // 空闲连接超时（秒）
-	IdleCheckFrequency int    `mapstructure:"idle_check_frequency"` // 空闲连接检查间隔（秒）
+	Enabled      bool   `mapstructure:"enabled"`        // 是否启用 Redis
+	Host         string `mapstructure:"host"`           // 主机（enabled 时必填）
+	Port         int    `mapstructure:"port"`           // 端口，默认 6379
+	Password     string `mapstructure:"password"`       // 密码，可通过环境变量 REDIS_PASSWORD 覆盖
+	DB           int    `mapstructure:"db"`             // 逻辑库编号，范围 0-15
+	PoolSize     int    `mapstructure:"pool_size"`      // 连接池大小
+	MinIdleConns int    `mapstructure:"min_idle_conns"` // 最小空闲连接数
+	IdleTimeout  int    `mapstructure:"idle_timeout"`   // 空闲连接超时（秒）
 }
 
 // JWTConfig JWT 认证配置。
@@ -472,7 +503,8 @@ func setDefaults(v *viper.Viper) {
 
 	v.SetDefault("jwt.access_token_ttl", 7200)    // 2 hours in seconds
 	v.SetDefault("jwt.refresh_token_ttl", 604800) // 7 days in seconds
-	v.SetDefault("jwt.skip_paths", []string{"/health", "/readiness", "/liveness", "/version", "/swagger/*any"})
+	// Extra skip paths; system/client/internal defaults always applied via MergeJWTSkipPaths.
+	v.SetDefault("jwt.skip_paths", []string{})
 
 	v.SetDefault("rate_limit.enabled", false)
 	v.SetDefault("rate_limit.store", "memory")
@@ -508,6 +540,12 @@ func setDefaults(v *viper.Viper) {
 
 	v.SetDefault("metrics.enabled", false)
 	v.SetDefault("metrics.path", "/metrics")
+
+	v.SetDefault("scheduler.enabled", false)
+	v.SetDefault("scheduler.register_demo_job", false)
+	v.SetDefault("captcha.enabled", false)
+	v.SetDefault("object_storage.enabled", false)
+	v.SetDefault("payment.enabled", false)
 }
 
 func loadOptionalDotenv(path string) {

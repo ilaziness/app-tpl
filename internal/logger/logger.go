@@ -100,6 +100,33 @@ func New(cfg Config) (*Logger, error) {
 	}, nil
 }
 
+// NewStdoutLogger creates a logger that only writes to stdout, regardless of
+// the main logger's output config. It is intended for HTTP access logs that
+// should not be persisted to log files.
+func NewStdoutLogger(level string) *zap.Logger {
+	lvl, err := zapcore.ParseLevel(level)
+	if err != nil {
+		lvl = zapcore.InfoLevel
+	}
+	encoderConfig := zapcore.EncoderConfig{
+		TimeKey:        "time",
+		LevelKey:       "level",
+		NameKey:        "logger",
+		CallerKey:      "caller",
+		FunctionKey:    zapcore.OmitKey,
+		MessageKey:     "msg",
+		StacktraceKey:  "stacktrace",
+		LineEnding:     zapcore.DefaultLineEnding,
+		EncodeLevel:    zapcore.CapitalColorLevelEncoder,
+		EncodeTime:     zapcore.ISO8601TimeEncoder,
+		EncodeDuration: zapcore.SecondsDurationEncoder,
+		EncodeCaller:   zapcore.ShortCallerEncoder,
+	}
+	encoder := zapcore.NewConsoleEncoder(encoderConfig)
+	core := zapcore.NewCore(encoder, zapcore.AddSync(os.Stdout), lvl)
+	return zap.New(core, zap.AddCaller(), zap.AddCallerSkip(1))
+}
+
 // createFileCore creates a file-based core with log rotation.
 func createFileCore(cfg Config, encoder zapcore.Encoder, level zapcore.Level) zapcore.Core {
 	writer := &lumberjack.Logger{

@@ -16,7 +16,7 @@ func TestNewHTTPServer_invalidHandlers(t *testing.T) {
 	}
 	logger := zap.NewNop()
 
-	_, err := NewHTTPServer(cfg, logger, nil, nil, nil)
+	_, err := NewHTTPServer(cfg, logger, logger, nil, nil, nil, nil)
 	require.Error(t, err)
 }
 
@@ -30,7 +30,7 @@ func TestNewHTTPServer_registersRoutes(t *testing.T) {
 	handlers, err := router.NewHandlers(health, httphandler.NewUserHandler(nil))
 	require.NoError(t, err)
 
-	srv, err := NewHTTPServer(cfg, logger, handlers, nil, nil)
+	srv, err := NewHTTPServer(cfg, logger, logger, handlers, nil, nil, nil)
 	require.NoError(t, err)
 	require.NotNil(t, srv.Router())
 

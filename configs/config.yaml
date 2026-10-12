@@ -49,19 +49,14 @@ redis:
   pool_size: 50
   min_idle_conns: 5
   idle_timeout: 300
-  idle_check_frequency: 60
 
 # JWT configuration
 # jwt.secret should be set via JWT_SECRET environment variable in production
+# Defaults always merge health/swagger/client/internal skips via MergeJWTSkipPaths
 jwt:
   access_token_ttl: 7200   # 2 hours in seconds
   refresh_token_ttl: 604800 # 7 days in seconds
-  skip_paths:
-    - /health
-    - /readiness
-    - /liveness
-    - /version
-    - /swagger/*any
+  skip_paths: []
 
 # Rate limiting configuration (disabled by default)
 rate_limit:
@@ -124,3 +119,25 @@ metrics:
   labels:
     env: dev
     version: "1.0.0"
+
+# Scheduler (cron) — disabled by default; uses Redis lock when redis.enabled
+scheduler:
+  enabled: false
+  register_demo_job: false
+
+# Captcha / object_storage / payment: config skeletons for pkg/*; not auto-wired in App yet
+captcha:
+  enabled: false
+
+object_storage:
+  enabled: false
+  provider: "" # aliyun | tencent | qiniu
+  bucket: ""
+  region: ""
+  endpoint: ""
+  access_key: ""
+  secret_key: ""
+  cdn_domain: ""
+
+payment:
+  enabled: false

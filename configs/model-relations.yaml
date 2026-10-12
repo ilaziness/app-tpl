@@ -1,0 +1,14 @@
+# Logical database relations used by `app-tpl gen model`.
+# These declarations generate Bun relations without adding database foreign keys.
+#
+# Shorthand:
+# relations:
+#   - orders.user_id -> users.id
+#
+# Override relation field names when a table has multiple references to the same target:
+# relations:
+#   - source: orders.created_by
+#     target: users.id
+#     field: Creator
+#     reverse_field: CreatedOrders
+relations: []

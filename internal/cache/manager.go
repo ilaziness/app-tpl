@@ -30,6 +30,11 @@ func (m *Manager) Close() error {
 	return m.cache.Close()
 }
 
+// Underlying returns the raw pkg/cache.Cache for adapters (e.g. captcha store).
+func (m *Manager) Underlying() pkgcache.Cache {
+	return m.cache
+}
+
 // --- generic helpers ---
 
 // get reads and decodes a value for the given KeySpec + parts.

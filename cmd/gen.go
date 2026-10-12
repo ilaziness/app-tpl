@@ -17,6 +17,7 @@ var (
 	genJSONTags      bool
 	genValidatorTags bool
 	genWithRelations bool
+	genRelationsFile string
 )
 
 var genCmd = &cobra.Command{
@@ -32,25 +33,16 @@ var genModelCmd = &cobra.Command{
 	RunE:  runGenModel,
 }
 
-var genDtoCmd = &cobra.Command{
-	Use:   "dto",
-	Short: "Generate DTO templates",
-	Long:  `Generate DTO (Data Transfer Object) templates for handlers.`,
-	RunE: func(cmd *cobra.Command, args []string) error {
-		return fmt.Errorf("dto generation is not yet implemented")
-	},
-}
-
 func init() {
-	genModelCmd.Flags().StringVar(&genTable, "table", "", "Table name to generate model for (default: all tables)")
-	genModelCmd.Flags().StringVar(&genOutput, "output", "./internal/model", "Output directory for generated models")
-	genModelCmd.Flags().StringVar(&genPackage, "package", "model", "Package name for generated models")
-	genModelCmd.Flags().BoolVar(&genJSONTags, "json-tags", true, "Add JSON tags to generated models")
-	genModelCmd.Flags().BoolVar(&genValidatorTags, "validator-tags", false, "Add validator tags to generated models")
-	genModelCmd.Flags().BoolVar(&genWithRelations, "with-relations", false, "Generate model relationships from foreign keys")
+	genModelCmd.Flags().StringVar(&genTable, "table", "", "Database table name (string; omit to generate all tables)")
+	genModelCmd.Flags().StringVar(&genOutput, "output", "./internal/model", "Generated model output directory (string path)")
+	genModelCmd.Flags().StringVar(&genPackage, "package", "model", "Generated model package name (string)")
+	genModelCmd.Flags().BoolVar(&genJSONTags, "json-tags", true, "Whether to add JSON tags (bool: true or false)")
+	genModelCmd.Flags().BoolVar(&genValidatorTags, "validator-tags", false, "Whether to add validator tags (bool: true or false)")
+	genModelCmd.Flags().BoolVar(&genWithRelations, "with-relations", false, "Whether to generate relationships from foreign keys (bool: true or false)")
+	genModelCmd.Flags().StringVar(&genRelationsFile, "relations", "./configs/model-relations.yaml", "Business relation definition YAML file (string path)")
 
 	genCmd.AddCommand(genModelCmd)
-	genCmd.AddCommand(genDtoCmd)
 	rootCmd.AddCommand(genCmd)
 }
 
@@ -91,12 +83,18 @@ func runGenModel(cmd *cobra.Command, args []string) error {
 		return nil
 	}
 
+	relations, err := gen.LoadRelations(genRelationsFile)
+	if err != nil {
+		return fmt.Errorf("load --relations: %w", err)
+	}
+
 	opts := gen.GenerateOptions{
 		OutputDir:     genOutput,
 		PackageName:   genPackage,
 		JSONTags:      genJSONTags,
 		ValidatorTags: genValidatorTags,
 		WithRelations: genWithRelations,
+		Relations:     relations,
 	}
 
 	if err := gen.GenerateModels(ctx, db, cfg.Database.Driver, tables, opts); err != nil {

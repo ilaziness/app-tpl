@@ -11,6 +11,7 @@ type Handlers struct {
 	Health             *httphandler.HealthHandler
 	User               *httphandler.UserHandler
 	InternalServiceKey string // optional; when set, internal API requires X-Internal-Service-Key
+	RequireAdminAuth   bool   // when true, admin routes require JWT (set when jwt.secret is configured)
 }
 
 // NewHandlers creates Handlers with required dependencies.

@@ -2,36 +2,31 @@
 
 按层自下而上添加代码，最后在 `internal/app/http.go` 的 `wireHTTP()` 中追加 wiring（与现有 user 等模块并列，非替换整个函数）。
 
+推荐流程：**写迁移 → `migrate up` → `gen model` → Repository / Service / Handler / 路由**。
+
 ## 1. 创建模型（Model）
 
-在 `internal/model/` 下新建模型文件，使用 Bun 标签：
+优先通过 CLI 从数据库生成（输出 `*.gen.go`，含时间戳 Hook）：
 
-```go
-package model
-
-import "github.com/uptrace/bun"
-
-type Order struct {
-    bun.BaseModel `bun:"table:orders,alias:o"`
-
-    ID        int64   `bun:"id,pk,autoincrement"`
-    UserID    int64   `bun:"user_id,notnull"`
-    Amount    float64 `bun:"amount,notnull"`
-    Status    string  `bun:"status,notnull,default:'pending'"`
-    CreatedAt int64   `bun:"created_at,notnull"`
-}
+```bash
+./build/app-tpl migrate create create_orders_table
+# 编辑 migrations/*.up.sql 后
+./build/app-tpl migrate up
+./build/app-tpl gen model --table orders
 ```
+
+逻辑关联见 [`configs/model-relations.yaml`](../../configs/model-relations.yaml)。不要手填 `created_at`/`updated_at`。
 
 ## 2. 创建 DTO（可选）
 
-在 `internal/dto/` 下新建 DTO 文件：
+在 `internal/dto/` 下新建 DTO（多 API 面时按 `admin`/`client` 分包）。校验使用 gin `binding` tag：
 
 ```go
 package dto
 
 type CreateOrderRequest struct {
-    UserID int64   `json:"user_id" validate:"required"`
-    Amount float64 `json:"amount" validate:"required,gt=0"`
+    UserID int64   `json:"user_id" binding:"required"`
+    Amount float64 `json:"amount" binding:"required,gt=0"`
 }
 
 type OrderResponse struct {

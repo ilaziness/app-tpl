@@ -8,13 +8,17 @@ import (
 
 func registerAdminRoutes(engine *gin.Engine, h *Handlers) {
 	v1 := engine.Group(PathAdminV1)
-	v1.Use(httpmiddleware.RequireAuth())
+	if h.RequireAdminAuth {
+		v1.Use(httpmiddleware.RequireAuth())
+	}
 
 	registerAdminUserRoutes(v1, h.User)
 
 	// 注册 v2 版本（如需要）
 	// v2 := engine.Group(PathAdminV2)
-	// v2.Use(httpmiddleware.RequireAuth())
+	// if h.RequireAdminAuth {
+	// 	v2.Use(httpmiddleware.RequireAuth())
+	// }
 }
 
 func registerAdminUserRoutes(v1 *gin.RouterGroup, user *httphandler.UserHandler) {

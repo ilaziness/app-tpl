@@ -54,3 +54,17 @@
 - **业务缓存管理**（`internal/cache`）：KeySpec（Prefix + TTL）定义业务键，Manager 提供按实体的 typed Get/Set/Delete 方法（如 `GetUserByID/SetUserByID/DelUserByID`），内部用泛型 helper 统一处理 Memory 直存与 Redis JSON 反序列化 — 按业务实体拆文件（`user.go` 等），KeySpec 与 typed 方法同文件存放 — 示例见 `internal/cache/user_test.go`
 - **事件机制**（`pkg/event`）：通用事件总线 — 发布/订阅、同步/异步、优先级、通配符、取消订阅函数、哨兵错误 — 自包含，不依赖 internal — 示例见 `pkg/event/example_test.go`
 - **业务事件**（`internal/event`）：只放业务相关事件定义（事件名常量、payload、发布函数），机制在 `pkg/event`，按业务领域拆文件（如 `lifecycle.go`）
+
+## 锁 / 调度 / 验证码 / 存储 / 支付
+
+- **分布式锁**（`pkg/lock`）：Redis 或内存实现；`internal/app` 注入 `Locker`；业务 key 用 `internal/lock` 辅助函数生成
+- **调度器**（`internal/scheduler`）：cron + 可选 Redis 选主；配置 `scheduler.enabled`；实现 `Job` 并 `Register`
+- **验证码**（`pkg/captcha`）：接口 + PNG 实现；可注入 cache store
+- **对象存储**（`pkg/objectstorage`）：Aliyun/Tencent/Qiniu；配置 `object_storage.*`，默认关闭
+- **支付**（`pkg/payment`）：厂商 registry + Alipay/WeChat；配置 `payment.enabled`，默认关闭，不强制初始化商户客户端
+
+## 模型生成
+
+- 优先 `app-tpl gen model` 生成 `*.gen.go`（见 [commands.md](commands.md)）
+- 逻辑关联：`configs/model-relations.yaml`
+- 迁移多语句用 `--bun:split` 分隔

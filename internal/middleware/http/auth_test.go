@@ -114,6 +114,58 @@ func TestJWTAuth_SkipPath(t *testing.T) {
 	assert.Equal(t, http.StatusOK, w.Code)
 }
 
+func TestJWTAuth_SkipPathPrefix(t *testing.T) {
+	mgr := newAuthTestManager()
+	gin.SetMode(gin.TestMode)
+	r := gin.New()
+	r.Use(JWTAuth(mgr, "/api/client/*", "/api/admin/v1/auth/login", "/public*", "/public/*"))
+	r.GET("/api/client/v1/categories", func(c *gin.Context) {
+		c.JSON(http.StatusOK, gin.H{"ok": true})
+	})
+	r.POST("/api/admin/v1/auth/login", func(c *gin.Context) {
+		c.JSON(http.StatusOK, gin.H{"ok": true})
+	})
+	r.GET("/api/admin/v1/items", func(c *gin.Context) {
+		c.JSON(http.StatusOK, gin.H{"ok": true})
+	})
+	r.GET("/public/docs.xml", func(c *gin.Context) {
+		c.String(http.StatusOK, "docs")
+	})
+	r.GET("/public-extra", func(c *gin.Context) {
+		c.String(http.StatusOK, "extra")
+	})
+
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest(http.MethodGet, "/api/client/v1/categories", nil)
+	r.ServeHTTP(w, req)
+	assert.Equal(t, http.StatusOK, w.Code)
+
+	w = httptest.NewRecorder()
+	req, _ = http.NewRequest(http.MethodPost, "/api/admin/v1/auth/login", nil)
+	r.ServeHTTP(w, req)
+	assert.Equal(t, http.StatusOK, w.Code)
+
+	w = httptest.NewRecorder()
+	req, _ = http.NewRequest(http.MethodGet, "/api/admin/v1/items", nil)
+	r.ServeHTTP(w, req)
+	assert.Equal(t, http.StatusUnauthorized, w.Code)
+
+	for _, path := range []string{"/public/docs.xml", "/public-extra"} {
+		w = httptest.NewRecorder()
+		req, _ = http.NewRequest(http.MethodGet, path, nil)
+		r.ServeHTTP(w, req)
+		assert.Equal(t, http.StatusOK, w.Code, path)
+	}
+}
+
+func TestPathSkipped(t *testing.T) {
+	assert.True(t, pathSkipped("/api/client/v1/users", "/api/client/v1/users", []string{"/api/client/*"}))
+	assert.True(t, pathSkipped("/swagger/index.html", "/swagger/index.html", []string{"/swagger/*any"}))
+	assert.True(t, pathSkipped("/health", "/health", []string{"/health"}))
+	assert.True(t, pathSkipped("", "/public-extra", []string{"/public*"}))
+	assert.False(t, pathSkipped("/api/admin/v1/items", "/api/admin/v1/items", []string{"/api/client/*"}))
+}
+
 func TestJWTMiddleware_ContextClaims(t *testing.T) {
 	mgr := newAuthTestManager()
 	token, err := mgr.GenerateAccessToken(123)
