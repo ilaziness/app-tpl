@@ -65,7 +65,7 @@ func runMigrateUp(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return err
 	}
-	defer db.Close()
+	defer func() { _ = db.Close() }()
 
 	ctx := context.Background()
 	result, err := dbmigrate.Up(ctx, db, migrateDir, dryRun)
@@ -101,7 +101,7 @@ func runMigrateDown(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return err
 	}
-	defer db.Close()
+	defer func() { _ = db.Close() }()
 
 	ctx := context.Background()
 	result, err := dbmigrate.Down(ctx, db, migrateDir, dryRun)
@@ -135,7 +135,7 @@ func runMigrateStatus(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return err
 	}
-	defer db.Close()
+	defer func() { _ = db.Close() }()
 
 	ctx := context.Background()
 	lines, err := dbmigrate.Status(ctx, db, migrateDir)

@@ -35,7 +35,7 @@ func (driver) Notify(ctx context.Context, raw json.RawMessage, req payment.Notif
 	}
 	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, "https://notify.local/", bytes.NewReader(req.Body))
 	if err != nil {
-		return nil, fmt.Errorf("%w: %v", payment.ErrInvalidRequest, err)
+		return nil, fmt.Errorf("%w: %w", payment.ErrInvalidRequest, err)
 	}
 	if req.Headers != nil {
 		httpReq.Header = req.Headers.Clone()

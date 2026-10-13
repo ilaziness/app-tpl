@@ -158,7 +158,7 @@ func (a *App) startServers(ctx context.Context, stop context.CancelFunc) error {
 	if a.httpServer != nil && a.httpServer.Enabled() {
 		a.log.Info("Starting HTTP server", zap.String("addr", a.httpServer.Addr()))
 		go func() {
-			if err := a.httpServer.Serve(); err != nil && err != stdhttp.ErrServerClosed {
+			if err := a.httpServer.Serve(); err != nil && !errors.Is(err, stdhttp.ErrServerClosed) {
 				a.log.Error("HTTP server exited with error", zap.Error(err))
 				a.httpFailed.Store(true)
 				stop()

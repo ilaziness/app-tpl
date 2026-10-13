@@ -14,7 +14,7 @@ func newClient(cfg Config) (*sdk.Client, error) {
 	production := !cfg.Sandbox
 	client, err := sdk.New(cfg.AppID, strings.TrimSpace(cfg.PrivateKey), production)
 	if err != nil {
-		return nil, fmt.Errorf("%w: %v", payment.ErrInvalidConfig, err)
+		return nil, fmt.Errorf("%w: %w", payment.ErrInvalidConfig, err)
 	}
 	mode := cfg.SignMode
 	if mode == "" {
@@ -23,17 +23,17 @@ func newClient(cfg Config) (*sdk.Client, error) {
 	switch mode {
 	case signModeKey:
 		if err := client.LoadAliPayPublicKey(strings.TrimSpace(cfg.AlipayPublicKey)); err != nil {
-			return nil, fmt.Errorf("%w: alipay public key: %v", payment.ErrInvalidConfig, err)
+			return nil, fmt.Errorf("%w: alipay public key: %w", payment.ErrInvalidConfig, err)
 		}
 	case signModeCert:
 		if err := client.LoadAppCertPublicKey(strings.TrimSpace(cfg.AppCert)); err != nil {
-			return nil, fmt.Errorf("%w: app cert: %v", payment.ErrInvalidConfig, err)
+			return nil, fmt.Errorf("%w: app cert: %w", payment.ErrInvalidConfig, err)
 		}
 		if err := client.LoadAliPayRootCert(strings.TrimSpace(cfg.AlipayRootCert)); err != nil {
-			return nil, fmt.Errorf("%w: alipay root cert: %v", payment.ErrInvalidConfig, err)
+			return nil, fmt.Errorf("%w: alipay root cert: %w", payment.ErrInvalidConfig, err)
 		}
 		if err := client.LoadAlipayCertPublicKey(strings.TrimSpace(cfg.AlipayPublicCert)); err != nil {
-			return nil, fmt.Errorf("%w: alipay public cert: %v", payment.ErrInvalidConfig, err)
+			return nil, fmt.Errorf("%w: alipay public cert: %w", payment.ErrInvalidConfig, err)
 		}
 	default:
 		return nil, fmt.Errorf("%w: sign_mode must be key or cert", payment.ErrInvalidConfig)

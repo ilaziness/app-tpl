@@ -38,7 +38,7 @@ func parseConfig(raw json.RawMessage) (Config, error) {
 	}
 	var cfg Config
 	if err := json.Unmarshal(raw, &cfg); err != nil {
-		return Config{}, fmt.Errorf("%w: %v", payment.ErrInvalidConfig, err)
+		return Config{}, fmt.Errorf("%w: %w", payment.ErrInvalidConfig, err)
 	}
 	cfg.AppID = strings.TrimSpace(cfg.AppID)
 	cfg.SignMode = strings.ToLower(strings.TrimSpace(cfg.SignMode))
@@ -57,10 +57,10 @@ func validateConfig(raw json.RawMessage) error {
 
 func checkConfig(cfg Config) error {
 	if err := optionalHTTPURL(cfg.NotifyURL); err != nil {
-		return fmt.Errorf("%w: notify_url: %v", payment.ErrInvalidConfig, err)
+		return fmt.Errorf("%w: notify_url: %w", payment.ErrInvalidConfig, err)
 	}
 	if err := optionalHTTPURL(cfg.ReturnURL); err != nil {
-		return fmt.Errorf("%w: return_url: %v", payment.ErrInvalidConfig, err)
+		return fmt.Errorf("%w: return_url: %w", payment.ErrInvalidConfig, err)
 	}
 	if !cfg.Enabled {
 		return nil

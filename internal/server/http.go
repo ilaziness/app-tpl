@@ -140,8 +140,7 @@ func NewHTTPServer(deps HTTPServerDeps) (*HTTPServer, error) {
 			minVersion = tls.VersionTLS12
 		}
 		server.TLSConfig = &tls.Config{ //nolint:gosec // MinVersion is set from config, default TLS 1.3
-			MinVersion:               minVersion,
-			PreferServerCipherSuites: true,
+			MinVersion: minVersion,
 		}
 		httpServer.tls = true
 		httpServer.certFile = cfg.HTTP.TLS.CertFile

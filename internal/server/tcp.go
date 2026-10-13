@@ -4,6 +4,7 @@ package server
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net"
 	"sync"
@@ -213,7 +214,8 @@ func (s *TCPServer) handleConnection(conn net.Conn) {
 		default:
 			n, err := conn.Read(buf)
 			if err != nil {
-				if netErr, ok := err.(net.Error); ok && netErr.Timeout() {
+				var netErr net.Error
+				if errors.As(err, &netErr) && netErr.Timeout() {
 					s.connMutex.Lock()
 					connection.TimeoutCount++
 					timeoutCount := connection.TimeoutCount

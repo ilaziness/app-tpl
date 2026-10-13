@@ -1,25 +1,33 @@
 version: "2"
 run:
   timeout: 5m
-  issues-exit-code: 1
 linters:
+  # standard defaults (errcheck, govet, ineffassign, staticcheck, unused) stay on.
+  # Extra linters align with template rules (error wrapping, HTTP, security, complexity).
   enable:
-    - errcheck
-    - govet
+    - bodyclose
+    - errorlint
     - gocyclo
-    - ineffassign
     - gosec
-    - staticcheck
-    - unused
     - misspell
-  disable:
-    - depguard
+    - nilerr
   settings:
     errcheck:
       check-type-assertions: true
       check-blank: false
+      exclude-functions:
+        - fmt.Fprint
+        - fmt.Fprintf
+        - fmt.Fprintln
+        - fmt.Print
+        - fmt.Printf
+        - fmt.Println
+    errorlint:
+      errorf: true
+      asserts: true
+      comparison: true
     gocyclo:
-      min-complexity: 60
+      min-complexity: 25
     govet:
       enable:
         - shadow
@@ -30,44 +38,33 @@ linters:
     rules:
       - linters:
           - errcheck
+          - errorlint
           - gosec
         path: _test\.go
       - linters:
           - gosec
         path: test/
+      # CLI: keep errcheck for Close/asserts; skip gosec path noise.
       - linters:
-          - errcheck
           - gosec
         path: cmd/
-      - linters:
-          - gosec
-        path: internal/errcode/code\.go
-        text: weak cryptographic primitive
+      # Codegen / large generated-style helpers.
       - linters:
           - errcheck
+          - gocyclo
           - gosec
           - staticcheck
         path: internal/database/gen/
       - linters:
           - gosec
         path: internal/database/migrate/
+      # Config Validate is enum/switch-heavy by nature.
       - linters:
-          - misspell
-        path: internal/event/example_test\.go
-    paths:
-      - third_party$
-      - builtin$
-      - examples$
-issues:
-  max-issues-per-linter: 0
-  max-same-issues: 0
+          - gocyclo
+        path: internal/config/
 formatters:
   enable:
     - gofmt
     - goimports
   exclusions:
     generated: lax
-    paths:
-      - third_party$
-      - builtin$
-      - examples$

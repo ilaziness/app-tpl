@@ -47,7 +47,7 @@ func runHealth(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return fmt.Errorf("health probe failed: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	_, _ = io.Copy(io.Discard, resp.Body)
 
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
@@ -102,7 +102,11 @@ func buildHealthURL(cfg *config.Config, probe string) (string, error) {
 }
 
 func newHealthClient(insecureTLS bool) *http.Client {
-	transport := http.DefaultTransport.(*http.Transport).Clone()
+	base, ok := http.DefaultTransport.(*http.Transport)
+	if !ok {
+		return &http.Client{Timeout: healthRequestTimeout}
+	}
+	transport := base.Clone()
 	if insecureTLS {
 		transport.TLSClientConfig = &tls.Config{InsecureSkipVerify: true} //nolint:gosec // local health probe against self-signed certs
 	}

@@ -177,7 +177,7 @@ func (b *bus) SubscribeWildcard(pattern string, handler EventHandler, opts ...Su
 
 	// 验证模式有效性
 	if _, err := filepath.Match(pattern, "test"); err != nil {
-		return nil, fmt.Errorf("subscribe wildcard %q: %w: %v", pattern, ErrInvalidPattern, err)
+		return nil, fmt.Errorf("subscribe wildcard %q: %w: %w", pattern, ErrInvalidPattern, err)
 	}
 
 	opt := resolveOptions(opts...)

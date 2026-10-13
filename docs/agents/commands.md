@@ -39,7 +39,7 @@ go install github.com/swaggo/swag/cmd/swag@latest
 
 | 命令 | 工具 | 安装 |
 |------|------|------|
-| `make lint` | golangci-lint | `go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.12.2` |
+| `make lint` | golangci-lint | `go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.14.0` |
 | `make swagger` | swag | `go install github.com/swaggo/swag/cmd/swag@latest` |
 | `make mock` | mockgen | `go install go.uber.org/mock/mockgen@latest` |
 

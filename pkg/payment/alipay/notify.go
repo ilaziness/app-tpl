@@ -23,7 +23,7 @@ func (driver) Notify(ctx context.Context, raw json.RawMessage, req payment.Notif
 	}
 	values, err := url.ParseQuery(string(req.Body))
 	if err != nil {
-		return nil, fmt.Errorf("%w: notify body: %v", payment.ErrInvalidRequest, err)
+		return nil, fmt.Errorf("%w: notify body: %w", payment.ErrInvalidRequest, err)
 	}
 	n, err := client.DecodeNotification(ctx, values)
 	if err != nil {

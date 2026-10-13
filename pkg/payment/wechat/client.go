@@ -15,14 +15,14 @@ import (
 func newClient(ctx context.Context, cfg Config) (*core.Client, error) {
 	key, err := utils.LoadPrivateKey(strings.TrimSpace(cfg.PrivateKey))
 	if err != nil {
-		return nil, fmt.Errorf("%w: private_key: %v", payment.ErrInvalidConfig, err)
+		return nil, fmt.Errorf("%w: private_key: %w", payment.ErrInvalidConfig, err)
 	}
 	opts := []core.ClientOption{
 		option.WithWechatPayAutoAuthCipher(cfg.MchID, cfg.MchSerialNo, key, strings.TrimSpace(cfg.APIv3Key)),
 	}
 	client, err := core.NewClient(ctx, opts...)
 	if err != nil {
-		return nil, fmt.Errorf("%w: wechat client: %v", payment.ErrInvalidConfig, err)
+		return nil, fmt.Errorf("%w: wechat client: %w", payment.ErrInvalidConfig, err)
 	}
 	return client, nil
 }

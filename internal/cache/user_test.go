@@ -83,8 +83,8 @@ func TestManager_UserRedisPath(t *testing.T) {
 	ctx := context.Background()
 
 	user := newTestUser(10)
-	if err := m.SetUserByID(ctx, 10, user); err != nil {
-		t.Fatalf("SetUserByID failed: %v", err)
+	if setErr := m.SetUserByID(ctx, 10, user); setErr != nil {
+		t.Fatalf("SetUserByID failed: %v", setErr)
 	}
 	got, err := m.GetUserByID(ctx, 10)
 	if err != nil {

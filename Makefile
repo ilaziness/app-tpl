@@ -89,9 +89,9 @@ deps:
 
 ## lint: Run linter
 lint:
-	$(call require_tool,golangci-lint,go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.12.2)
+	$(call require_tool,golangci-lint,go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.14.0)
 	@echo "Running linter..."
-	golangci-lint run --timeout=5m ./...
+	golangci-lint run ./...
 
 ## fmt: Format code
 fmt:

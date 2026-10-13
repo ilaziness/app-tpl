@@ -2,6 +2,7 @@
 package validator
 
 import (
+	"errors"
 	"fmt"
 	"reflect"
 	"strings"
@@ -60,14 +61,16 @@ func TranslateError(err error) error {
 	if err == nil {
 		return nil
 	}
-	if validationErrors, ok := err.(validator.ValidationErrors); ok {
+	var validationErrors validator.ValidationErrors
+	if errors.As(err, &validationErrors) {
 		messages := make([]string, 0, len(validationErrors))
 		for _, e := range validationErrors {
 			messages = append(messages, e.Translate(translator))
 		}
 		return fmt.Errorf("%s", strings.Join(messages, "; "))
 	}
-	if sliceErr, ok := err.(binding.SliceValidationError); ok {
+	var sliceErr binding.SliceValidationError
+	if errors.As(err, &sliceErr) {
 		if len(sliceErr) == 0 {
 			return nil
 		}
@@ -88,7 +91,8 @@ func TranslateError(err error) error {
 // ValidateVar validates a single variable with given tag.
 func ValidateVar(field any, tag string) error {
 	if err := validate.Var(field, tag); err != nil {
-		if validationErrors, ok := err.(validator.ValidationErrors); ok {
+		var validationErrors validator.ValidationErrors
+		if errors.As(err, &validationErrors) {
 			fe := validationErrors[0]
 			return fmt.Errorf("%s (%s)", fe.Translate(translator), fe.Tag())
 		}

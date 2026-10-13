@@ -514,7 +514,7 @@ func TestEventBus_SubscribeReturnsCancelFunc(t *testing.T) {
 
 	mu.Lock()
 	if count != 1 {
-		t.Errorf("expected 1 call after cancelling one of two subscribers, got %d", count)
+		t.Errorf("expected 1 call after canceling one of two subscribers, got %d", count)
 	}
 	mu.Unlock()
 
@@ -525,7 +525,7 @@ func TestEventBus_SubscribeReturnsCancelFunc(t *testing.T) {
 
 	mu.Lock()
 	if count != 1 {
-		t.Errorf("expected 1 call after cancelling both subscribers, got %d", count)
+		t.Errorf("expected 1 call after canceling both subscribers, got %d", count)
 	}
 	mu.Unlock()
 }
