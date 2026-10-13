@@ -176,7 +176,7 @@ func TestUserService_GetByID(t *testing.T) {
 		name     string
 		id       int64
 		mockFn   func(*MockUserRepository)
-		wantUser *model.User
+		wantUser *dto.UserResponse
 		wantErr  bool
 	}{
 		{
@@ -191,7 +191,7 @@ func TestUserService_GetByID(t *testing.T) {
 				}
 				m.On("GetByID", mock.Anything, int64(1)).Return(user, nil)
 			},
-			wantUser: &model.User{
+			wantUser: &dto.UserResponse{
 				ID:     1,
 				Email:  "test@example.com",
 				Name:   "Test User",
@@ -203,7 +203,7 @@ func TestUserService_GetByID(t *testing.T) {
 			name: "用户不存在",
 			id:   999,
 			mockFn: func(m *MockUserRepository) {
-				m.On("GetByID", mock.Anything, int64(999)).Return(nil, errors.New("not found"))
+				m.On("GetByID", mock.Anything, int64(999)).Return(nil, sql.ErrNoRows)
 			},
 			wantUser: nil,
 			wantErr:  true,

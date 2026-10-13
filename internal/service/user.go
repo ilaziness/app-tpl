@@ -6,7 +6,6 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
-	"time"
 
 	"github.com/ilaziness/app-tpl/internal/cache"
 	"github.com/ilaziness/app-tpl/internal/crypto"
@@ -19,13 +18,13 @@ import (
 // UserService defines the contract for user business logic.
 type UserService interface {
 	Create(ctx context.Context, req *dto.CreateUserRequest) (*dto.UserResponse, error)
-	GetByID(ctx context.Context, id int64) (*model.User, error)
+	GetByID(ctx context.Context, id int64) (*dto.UserResponse, error)
 	GetByEmail(ctx context.Context, email string) (*model.User, error)
 	ValidateCredentials(ctx context.Context, email, password string) (*model.User, error)
 	Update(ctx context.Context, id int64, req *dto.UpdateUserRequest) (*dto.UserResponse, error)
 	Delete(ctx context.Context, id int64) error
-	List(ctx context.Context, limit, offset int) ([]*model.User, error)
-	ListWithCount(ctx context.Context, limit, offset int) ([]*model.User, int, error)
+	List(ctx context.Context, limit, offset int) ([]*dto.UserResponse, error)
+	ListWithCount(ctx context.Context, limit, offset int) ([]*dto.UserResponse, int, error)
 }
 
 // userService handles user business logic.
@@ -46,7 +45,6 @@ func NewUserService(userRepo repository.UserRepository, cacheMgr *cache.Manager)
 
 // Create creates a new user.
 func (s *userService) Create(ctx context.Context, req *dto.CreateUserRequest) (*dto.UserResponse, error) {
-	// 检查邮箱是否已存在
 	existingUser, err := s.userRepo.GetByEmail(ctx, req.Email)
 	if err == nil && existingUser != nil {
 		return nil, errcode.UserAlreadyExists
@@ -55,7 +53,6 @@ func (s *userService) Create(ctx context.Context, req *dto.CreateUserRequest) (*
 		return nil, fmt.Errorf("failed to check user email: %w", err)
 	}
 
-	// 加密密码
 	hashedPassword, err := crypto.HashPassword(req.Password)
 	if err != nil {
 		return nil, fmt.Errorf("failed to hash password: %w", err)
@@ -75,52 +72,48 @@ func (s *userService) Create(ctx context.Context, req *dto.CreateUserRequest) (*
 	return toUserResponse(user), nil
 }
 
-// GetByID retrieves a user by ID using cache-aside: the cache is checked
-// first, and on a miss the user is loaded from the repository and written
-// back to the cache.
-func (s *userService) GetByID(ctx context.Context, id int64) (*model.User, error) {
+// GetByID retrieves a user by ID using cache-aside (public fields only; no password).
+func (s *userService) GetByID(ctx context.Context, id int64) (*dto.UserResponse, error) {
 	if cached, err := s.cache.GetUserByID(ctx, id); err == nil {
-		return cached, nil
+		return toUserResponse(cached), nil
 	}
-	// On cache miss or transient cache error, fall through to the repository.
 
 	user, err := s.userRepo.GetByID(ctx, id)
 	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, errcode.Wrap(errcode.UserNotFound, err)
+		}
 		return nil, fmt.Errorf("failed to get user: %w", err)
 	}
-	_ = s.cache.SetUserByID(ctx, id, user)
-	return user, nil
+	_ = s.cache.SetUserByID(ctx, id, publicUser(user))
+	return toUserResponse(user), nil
 }
 
-// GetByEmail retrieves a user by email using cache-aside.
+// GetByEmail retrieves a user by email from the repository (includes password hash
+// for auth flows). Prefer GetByID for HTTP responses.
 func (s *userService) GetByEmail(ctx context.Context, email string) (*model.User, error) {
-	if cached, err := s.cache.GetUserByEmail(ctx, email); err == nil {
-		return cached, nil
-	}
-	// On cache miss or transient cache error, fall through to the repository.
-
 	user, err := s.userRepo.GetByEmail(ctx, email)
 	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, errcode.Wrap(errcode.UserNotFound, err)
+		}
 		return nil, fmt.Errorf("failed to get user by email: %w", err)
 	}
-	_ = s.cache.SetUserByEmail(ctx, email, user)
 	return user, nil
 }
 
 // ValidateCredentials validates user credentials (email and password).
-// It reuses the cached GetByEmail path for the user lookup.
+// Loads from the repository so the password hash is available (not from cache).
 func (s *userService) ValidateCredentials(ctx context.Context, email, password string) (*model.User, error) {
-	user, err := s.GetByEmail(ctx, email)
+	user, err := s.userRepo.GetByEmail(ctx, email)
 	if err != nil {
 		return nil, errcode.AuthFailed
 	}
 
-	// 检查用户状态
 	if user.Status != 1 {
 		return nil, errcode.UserDisabled
 	}
 
-	// 验证密码
 	if err := crypto.CheckPassword(password, user.Password); err != nil {
 		return nil, errcode.AuthFailed
 	}
@@ -130,7 +123,6 @@ func (s *userService) ValidateCredentials(ctx context.Context, email, password s
 
 // Update updates an existing user.
 func (s *userService) Update(ctx context.Context, id int64, req *dto.UpdateUserRequest) (*dto.UserResponse, error) {
-	// 检查用户是否存在
 	user, err := s.userRepo.GetByID(ctx, id)
 	if err != nil {
 		return nil, errcode.Wrap(errcode.UserNotFound, err)
@@ -145,7 +137,6 @@ func (s *userService) Update(ctx context.Context, id int64, req *dto.UpdateUserR
 	if req.Status != nil {
 		user.Status = *req.Status
 	}
-	user.UpdatedAt = time.Now()
 
 	if err := s.userRepo.Update(ctx, user); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
@@ -154,14 +145,12 @@ func (s *userService) Update(ctx context.Context, id int64, req *dto.UpdateUserR
 		return nil, fmt.Errorf("failed to update user: %w", err)
 	}
 
-	// 失效双键缓存，防止脏读
 	s.invalidateUserCache(ctx, id, user.Email)
 	return toUserResponse(user), nil
 }
 
 // Delete deletes a user by ID.
 func (s *userService) Delete(ctx context.Context, id int64) error {
-	// 检查用户是否存在（同时获取 email 用于缓存失效）
 	user, err := s.userRepo.GetByID(ctx, id)
 	if err != nil {
 		return errcode.Wrap(errcode.UserNotFound, err)
@@ -174,14 +163,11 @@ func (s *userService) Delete(ctx context.Context, id int64) error {
 		return fmt.Errorf("failed to delete user: %w", err)
 	}
 
-	// 失效双键缓存
 	s.invalidateUserCache(ctx, id, user.Email)
 	return nil
 }
 
 // invalidateUserCache removes both the by-id and by-email cache entries.
-// Cache errors are ignored: a failed invalidation is not fatal; the entry
-// will simply expire according to its TTL.
 func (s *userService) invalidateUserCache(ctx context.Context, id int64, email string) {
 	_ = s.cache.DelUserByID(ctx, id)
 	if email != "" {
@@ -190,16 +176,16 @@ func (s *userService) invalidateUserCache(ctx context.Context, id int64, email s
 }
 
 // List retrieves a list of users with pagination.
-func (s *userService) List(ctx context.Context, limit, offset int) ([]*model.User, error) {
+func (s *userService) List(ctx context.Context, limit, offset int) ([]*dto.UserResponse, error) {
 	users, err := s.userRepo.List(ctx, limit, offset)
 	if err != nil {
 		return nil, fmt.Errorf("failed to list users: %w", err)
 	}
-	return users, nil
+	return toUserResponses(users), nil
 }
 
 // ListWithCount retrieves a list of users with pagination and returns total count.
-func (s *userService) ListWithCount(ctx context.Context, limit, offset int) ([]*model.User, int, error) {
+func (s *userService) ListWithCount(ctx context.Context, limit, offset int) ([]*dto.UserResponse, int, error) {
 	users, err := s.userRepo.List(ctx, limit, offset)
 	if err != nil {
 		return nil, 0, fmt.Errorf("failed to list users: %w", err)
@@ -210,10 +196,23 @@ func (s *userService) ListWithCount(ctx context.Context, limit, offset int) ([]*
 		return nil, 0, fmt.Errorf("failed to count users: %w", err)
 	}
 
-	return users, total, nil
+	return toUserResponses(users), total, nil
+}
+
+// publicUser returns a shallow copy without the password hash for caching.
+func publicUser(user *model.User) *model.User {
+	if user == nil {
+		return nil
+	}
+	cp := *user
+	cp.Password = ""
+	return &cp
 }
 
 func toUserResponse(user *model.User) *dto.UserResponse {
+	if user == nil {
+		return nil
+	}
 	return &dto.UserResponse{
 		ID:        user.ID,
 		Email:     user.Email,
@@ -223,4 +222,12 @@ func toUserResponse(user *model.User) *dto.UserResponse {
 		CreatedAt: user.CreatedAt,
 		UpdatedAt: user.UpdatedAt,
 	}
+}
+
+func toUserResponses(users []*model.User) []*dto.UserResponse {
+	out := make([]*dto.UserResponse, len(users))
+	for i, u := range users {
+		out[i] = toUserResponse(u)
+	}
+	return out
 }

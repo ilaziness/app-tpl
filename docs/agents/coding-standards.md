@@ -55,13 +55,16 @@
 - **事件机制**（`pkg/event`）：通用事件总线 — 发布/订阅、同步/异步、优先级、通配符、取消订阅函数、哨兵错误 — 自包含，不依赖 internal — 示例见 `pkg/event/example_test.go`
 - **业务事件**（`internal/event`）：只放业务相关事件定义（事件名常量、payload、发布函数），机制在 `pkg/event`，按业务领域拆文件（如 `lifecycle.go`）
 
-## 锁 / 调度 / 验证码 / 存储 / 支付
+## 锁 / 调度 / 验证码 / 存储 / 支付（`pkg` 预留能力）
 
-- **分布式锁**（`pkg/lock`）：Redis 或内存实现；`internal/app` 注入 `Locker`；业务 key 用 `internal/lock` 辅助函数生成
-- **调度器**（`internal/scheduler`）：cron + 可选 Redis 选主；配置 `scheduler.enabled`；实现 `Job` 并 `Register`
-- **验证码**（`pkg/captcha`）：接口 + PNG 实现；可注入 cache store
+`pkg/*` 是可复用公共能力库，**样例业务不强制接线**。启用时：读 `configs/config.yaml` 对应段，在 `internal/app` 构造并注入到需要的 service/handler。
+
+- **分布式锁**（`pkg/lock`）：Redis 或内存实现；业务需要时用 `pkglock.NewLockerFactory` 创建并注入 service；业务 key 用 `internal/lock` 辅助函数生成
+- **调度器**（`internal/scheduler`）：cron + 可选 Redis 选主；配置 `scheduler.enabled`；实现 `Job` 并 `Register`（在 `wireScheduler` 组装）
+- **验证码**（`pkg/captcha`）：接口 + PNG 实现；可注入 cache store；配置 `captcha.*`
 - **对象存储**（`pkg/objectstorage`）：Aliyun/Tencent/Qiniu；配置 `object_storage.*`，默认关闭
 - **支付**（`pkg/payment`）：厂商 registry + Alipay/WeChat；配置 `payment.enabled`，默认关闭，不强制初始化商户客户端
+- **事件**（`pkg/event`）：通用总线；样例仅发布生命周期事件，业务订阅按需扩展
 
 ## 模型生成
 

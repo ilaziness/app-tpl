@@ -8,15 +8,14 @@ import (
 	"github.com/ilaziness/app-tpl/internal/auth"
 	"github.com/ilaziness/app-tpl/internal/cache"
 	"github.com/ilaziness/app-tpl/internal/config"
-	"github.com/ilaziness/app-tpl/internal/event"
+	"github.com/ilaziness/app-tpl/internal/constant"
 	"github.com/ilaziness/app-tpl/internal/logger"
 	"github.com/ilaziness/app-tpl/internal/metrics"
+	"github.com/ilaziness/app-tpl/internal/response"
 	"github.com/ilaziness/app-tpl/internal/tracing"
 	"github.com/ilaziness/app-tpl/internal/utils"
 	pkgevent "github.com/ilaziness/app-tpl/pkg/event"
-	pkglock "github.com/ilaziness/app-tpl/pkg/lock"
 	"github.com/redis/go-redis/v9"
-	"go.uber.org/zap"
 )
 
 func (a *App) wireInfra() error {
@@ -40,6 +39,9 @@ func (a *App) wireInfra() error {
 	// Ensure utils.Go panic recovery can log.
 	utils.SetLogger(a.log)
 
+	// Response cause details only in development (avoids reading config.Cfg globally).
+	response.Configure(a.cfg.App.Env == constant.EnvDev)
+
 	db, err := newDatabase(a.cfg, a.log)
 	if err != nil {
 		return err
@@ -52,17 +54,7 @@ func (a *App) wireInfra() error {
 
 	a.jwtMgr = auth.NewJWTManagerFromConfig(a.cfg)
 
-	cacheMgr, err := cache.NewManagerFromConfig(a.cfg)
-	if err != nil {
-		return err
-	}
-	a.cacheMgr = cacheMgr
-	a.addHook(Hook{
-		Name:   "cache",
-		OnStop: func(ctx context.Context) error { return a.cacheMgr.Close() },
-	})
-
-	// Independent Redis client for locks / scheduler (not the cache client).
+	// Shared Redis client for cache / rate-limit / scheduler / business locks when enabled.
 	if a.cfg.Redis.Enabled {
 		redisClient, redisErr := newRedisClient(a.cfg)
 		if redisErr != nil {
@@ -75,13 +67,21 @@ func (a *App) wireInfra() error {
 		})
 	}
 
-	lockerFactory := pkglock.NewLockerFactory(pkglock.LockerFactoryOptions{
-		RedisClient: a.redisClient,
+	cacheMgr, err := cache.NewManagerFromConfig(a.cfg, a.redisClient)
+	if err != nil {
+		return err
+	}
+	a.cacheMgr = cacheMgr
+	a.addHook(Hook{
+		Name:   "cache",
+		OnStop: func(ctx context.Context) error { return a.cacheMgr.Close() },
 	})
-	a.locker = lockerFactory.Create()
+
+	// Business distributed locks (pkg/lock): create via pkglock.NewLockerFactory when a
+	// service needs them, e.g. lockerFactory.Create() then inject into that service.
+	// Do not eagerly wire an unused process-wide locker here.
 
 	a.eventBus = pkgevent.NewEventBusWithLogger(a.log)
-	a.registerBuiltinEventListeners()
 	a.addHook(Hook{
 		Name:   "event_bus",
 		OnStop: func(ctx context.Context) error { return a.eventBus.Close() },
@@ -99,24 +99,12 @@ func (a *App) wireInfra() error {
 
 	a.metrics = metrics.NewMetrics(a.cfg)
 
+	a.wireScheduler()
+
 	return nil
 }
 
-func (a *App) registerBuiltinEventListeners() {
-	if _, err := a.eventBus.Subscribe(event.EventAppStopped, func(ctx context.Context, ev *pkgevent.Event) error {
-		if payload, ok := ev.Payload.(*event.AppStoppedPayload); ok {
-			a.log.Info("Application stopped",
-				zap.Duration("uptime", payload.Uptime),
-				zap.Time("stop_time", payload.StopTime),
-			)
-		}
-		return nil
-	}); err != nil && a.log != nil {
-		a.log.Warn("Failed to subscribe to app stopped event", zap.Error(err))
-	}
-}
-
-// newRedisClient creates a Redis client for locks / scheduler (separate from cache).
+// newRedisClient creates the shared Redis client used by cache, rate-limit, and scheduler.
 func newRedisClient(cfg *config.Config) (*redis.Client, error) {
 	client := redis.NewClient(&redis.Options{
 		Addr:            fmt.Sprintf("%s:%d", cfg.Redis.Host, cfg.Redis.Port),
@@ -131,7 +119,7 @@ func newRedisClient(cfg *config.Config) (*redis.Client, error) {
 	defer cancel()
 	if err := client.Ping(ctx).Err(); err != nil {
 		_ = client.Close()
-		return nil, fmt.Errorf("failed to connect to Redis for lock/scheduler: %w", err)
+		return nil, fmt.Errorf("failed to connect to Redis: %w", err)
 	}
 
 	return client, nil

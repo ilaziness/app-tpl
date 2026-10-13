@@ -3,10 +3,9 @@ package response
 
 import (
 	"net/http"
+	"sync/atomic"
 
 	"github.com/gin-gonic/gin"
-	"github.com/ilaziness/app-tpl/internal/config"
-	"github.com/ilaziness/app-tpl/internal/constant"
 	errcode "github.com/ilaziness/app-tpl/internal/errcode"
 )
 
@@ -27,12 +26,17 @@ type PageData struct {
 	TotalPages int   `json:"total_pages"`
 }
 
-// isDev checks if the application is running in development mode.
-func isDev() bool {
-	if config.Cfg == nil {
-		return false
-	}
-	return config.Cfg.App.Env == constant.EnvDev
+// includeCause controls whether Error responses expose Cause (dev debugging).
+// Set via Configure during app bootstrap; defaults to false.
+var includeCause atomic.Bool
+
+// Configure sets whether error responses include Cause details.
+func Configure(showCause bool) {
+	includeCause.Store(showCause)
+}
+
+func showCause() bool {
+	return includeCause.Load()
 }
 
 // Success sends a successful response.
@@ -79,8 +83,7 @@ func Error(c *gin.Context, err error) {
 		message = codeErr.Message
 		httpStatus = codeErr.GetHTTPStatus()
 
-		// In development mode, return cause details for debugging
-		if isDev() && codeErr.Cause != nil {
+		if showCause() && codeErr.Cause != nil {
 			cause = codeErr.Cause.Error()
 		}
 	}
@@ -109,8 +112,7 @@ func ErrorWithData(c *gin.Context, err error, data any) {
 		message = codeErr.Message
 		httpStatus = codeErr.GetHTTPStatus()
 
-		// In development mode, return cause details for debugging
-		if isDev() && codeErr.Cause != nil {
+		if showCause() && codeErr.Cause != nil {
 			cause = codeErr.Cause.Error()
 		}
 	}

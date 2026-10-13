@@ -22,7 +22,6 @@ import (
 	"github.com/ilaziness/app-tpl/internal/server"
 	"github.com/ilaziness/app-tpl/internal/tracing"
 	pkgevent "github.com/ilaziness/app-tpl/pkg/event"
-	pkglock "github.com/ilaziness/app-tpl/pkg/lock"
 	"github.com/redis/go-redis/v9"
 	"go.uber.org/zap"
 )
@@ -40,10 +39,8 @@ type App struct {
 	metrics  *metrics.Metrics
 	jwtMgr   *auth.JWTManager
 
-	// redisClient is used for locks / scheduler (separate from cache).
+	// redisClient is the shared Redis client (cache / rate-limit / scheduler / locks).
 	redisClient *redis.Client
-	// locker is a process-wide distributed lock (Redis or in-memory fallback).
-	locker pkglock.Locker
 
 	httpServer *server.HTTPServer
 	tcpServer  *server.TCPServer

@@ -4,8 +4,6 @@ package http
 import (
 	"github.com/gin-gonic/gin"
 	"github.com/ilaziness/app-tpl/internal/dto"
-	errcode "github.com/ilaziness/app-tpl/internal/errcode"
-	"github.com/ilaziness/app-tpl/internal/model"
 	"github.com/ilaziness/app-tpl/internal/response"
 	"github.com/ilaziness/app-tpl/internal/service"
 )
@@ -37,13 +35,13 @@ func (h *UserHandler) GetUser(c *gin.Context) {
 		return
 	}
 
-	user, err := h.userService.GetByID(c.Request.Context(), req.ID)
+	resp, err := h.userService.GetByID(c.Request.Context(), req.ID)
 	if err != nil {
 		HandleServiceError(c, err)
 		return
 	}
 
-	response.Success(c, toUserResponse(user))
+	response.Success(c, resp)
 }
 
 // CreateUser creates a new user.
@@ -65,11 +63,7 @@ func (h *UserHandler) CreateUser(c *gin.Context) {
 
 	resp, err := h.userService.Create(c.Request.Context(), &req)
 	if err != nil {
-		if codeErr, ok := errcode.As(err); ok && codeErr.Code == errcode.UserAlreadyExists.Code {
-			response.Error(c, errcode.UserAlreadyExists)
-			return
-		}
-		response.Error(c, errcode.Wrap(errcode.InternalError, err))
+		HandleServiceError(c, err)
 		return
 	}
 
@@ -154,29 +148,9 @@ func (h *UserHandler) ListUsers(c *gin.Context) {
 
 	users, total, err := h.userService.ListWithCount(c.Request.Context(), limit, offset)
 	if err != nil {
-		response.Error(c, errcode.Wrap(errcode.InternalError, err))
+		HandleServiceError(c, err)
 		return
 	}
 
-	userResponses := make([]*dto.UserResponse, len(users))
-	for i, user := range users {
-		userResponses[i] = toUserResponse(user)
-	}
-
-	response.SuccessPage(c, userResponses, int64(total), page, limit, req.GetTotalPages(total))
-}
-
-func toUserResponse(user *model.User) *dto.UserResponse {
-	if user == nil {
-		return nil
-	}
-	return &dto.UserResponse{
-		ID:        user.ID,
-		Email:     user.Email,
-		Name:      user.Name,
-		Phone:     user.Phone,
-		Status:    user.Status,
-		CreatedAt: user.CreatedAt,
-		UpdatedAt: user.UpdatedAt,
-	}
+	response.SuccessPage(c, users, int64(total), page, limit, req.GetTotalPages(total))
 }

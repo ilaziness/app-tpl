@@ -10,6 +10,7 @@ import (
 
 	"github.com/bsm/redislock"
 	"github.com/redis/go-redis/v9"
+	"go.uber.org/zap"
 )
 
 // 锁相关常量。
@@ -33,15 +34,15 @@ type redisLockProvider struct {
 
 // NewScheduler 创建调度器。redisClient 为 nil 时使用空锁（单实例模式），
 // 非 nil 时使用 Redis 分布式锁（多实例互斥保护）。
-// 调用方只需传入 redis client，无需关心锁的具体实现。
-func NewScheduler(redisClient *redis.Client) *Scheduler {
+// log 为 nil 时使用 zap.NewNop()。
+func NewScheduler(redisClient *redis.Client, log *zap.Logger) *Scheduler {
 	var lock LockProvider
 	if redisClient == nil {
 		lock = NoopLockProvider{}
 	} else {
 		lock = newRedisLockProvider(redisClient)
 	}
-	return newSchedulerWithLock(lock)
+	return newSchedulerWithLock(lock, log)
 }
 
 // newRedisLockProvider 基于 redis client 创建调度器分布式锁实现。

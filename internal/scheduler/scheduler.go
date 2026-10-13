@@ -5,7 +5,7 @@
 //
 // 新增任务只需实现 Job 接口并调用 Register 注册：
 //
-//	sched := scheduler.NewScheduler(redisClient)
+//	sched := scheduler.NewScheduler(redisClient, log)
 //	sched.Register(scheduler.NewCollectJob(repo, runner))
 //	sched.Start(ctx)
 package scheduler
@@ -17,7 +17,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/ilaziness/app-tpl/internal/logger"
 	"github.com/ilaziness/app-tpl/internal/utils"
 	"github.com/robfig/cron/v3"
 	"go.uber.org/zap"
@@ -87,11 +86,11 @@ func (NoopLockProvider) noHeartbeat() {}
 
 // Scheduler 封装 robfig/cron/v3，提供通用 cron 调度生命周期管理。
 // 持有所有注册的 Job，统一启动（Start）和停止（Stop）。
-// 日志使用全局 logger.Log，不注入。
 type Scheduler struct {
 	cron *cron.Cron
 	jobs []Job
 	lock LockProvider
+	log  *zap.Logger
 
 	// cronStarted 标记 cron 是否已实际启动，用于 Stop 判断是否需要停止。
 	// 使用 atomic.Bool 因为心跳 goroutine 在锁丢失时也会写入此字段。
@@ -114,13 +113,17 @@ type Scheduler struct {
 
 // newSchedulerWithLock 是内部构造函数，用指定的锁创建调度器。
 // 外部应使用 NewScheduler（redislock.go）传入 redis client，由其决定锁策略。
-func newSchedulerWithLock(lock LockProvider) *Scheduler {
+func newSchedulerWithLock(lock LockProvider, log *zap.Logger) *Scheduler {
+	if log == nil {
+		log = zap.NewNop()
+	}
 	return &Scheduler{
 		cron: cron.New(
 			cron.WithParser(defaultParser),
 			cron.WithChain(cron.Recover(cron.DefaultLogger)),
 		),
 		lock:              lock,
+		log:               log,
 		lockRenewInterval: defaultLockRenewInterval,
 	}
 }
@@ -148,7 +151,7 @@ func (s *Scheduler) Start(ctx context.Context) error {
 			return fmt.Errorf("scheduler: acquire lock: %w", err)
 		}
 		if !ok {
-			logger.Log.Info("scheduler: another instance already holds the lock, skipping cron startup")
+			s.log.Info("scheduler: another instance already holds the lock, skipping cron startup")
 			return nil
 		}
 		s.lockOwned = true
@@ -198,12 +201,12 @@ func (s *Scheduler) startHeartbeat() {
 				if errors.Is(err, ErrLockNotHeld) {
 					// 锁已丢失，停止 cron 避免 split-brain。
 					// 不调用 releaseLock（会等待自身退出导致死锁），仅停止 cron 并退出。
-					logger.Log.Error("scheduler: lock lost, stopping cron to avoid split-brain")
+					s.log.Error("scheduler: lock lost, stopping cron to avoid split-brain")
 					s.stopCron(context.Background())
 					s.cronStarted.Store(false)
 					return
 				}
-				logger.Log.Warn("scheduler: failed to renew lock", zap.Error(err))
+				s.log.Warn("scheduler: failed to renew lock", zap.Error(err))
 			case <-hbCtx.Done():
 				return
 			}
@@ -226,9 +229,9 @@ func (s *Scheduler) releaseLock(ctx context.Context) {
 	if err := s.lock.ReleaseSchedulerLock(ctx); err != nil {
 		if errors.Is(err, ErrLockNotHeld) {
 			// 锁已丢失（心跳已检测到并停止 cron），Release 返回 ErrLockNotHeld 是预期行为，不告警
-			logger.Log.Info("scheduler: lock already lost before release, skip")
+			s.log.Info("scheduler: lock already lost before release, skip")
 		} else {
-			logger.Log.Warn("scheduler: failed to release lock", zap.Error(err))
+			s.log.Warn("scheduler: failed to release lock", zap.Error(err))
 		}
 	}
 	s.lockOwned = false
@@ -258,7 +261,7 @@ func (s *Scheduler) stopCron(ctx context.Context) {
 	case <-stopCtx.Done():
 	case <-ctx.Done():
 	case <-timer.C:
-		logger.Log.Warn("cron scheduler stop timeout after 5s")
+		s.log.Warn("cron scheduler stop timeout after 5s")
 	}
 }
 

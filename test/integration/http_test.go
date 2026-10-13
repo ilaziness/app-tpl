@@ -41,12 +41,12 @@ func (m *MockUserService) Create(ctx context.Context, req *dto.CreateUserRequest
 	return args.Get(0).(*dto.UserResponse), args.Error(1)
 }
 
-func (m *MockUserService) GetByID(ctx context.Context, id int64) (*model.User, error) {
+func (m *MockUserService) GetByID(ctx context.Context, id int64) (*dto.UserResponse, error) {
 	args := m.Called(ctx, id)
 	if args.Get(0) == nil {
 		return nil, args.Error(1)
 	}
-	return args.Get(0).(*model.User), args.Error(1)
+	return args.Get(0).(*dto.UserResponse), args.Error(1)
 }
 
 func (m *MockUserService) GetByEmail(ctx context.Context, email string) (*model.User, error) {
@@ -70,20 +70,20 @@ func (m *MockUserService) Delete(ctx context.Context, id int64) error {
 	return args.Error(0)
 }
 
-func (m *MockUserService) List(ctx context.Context, limit, offset int) ([]*model.User, error) {
+func (m *MockUserService) List(ctx context.Context, limit, offset int) ([]*dto.UserResponse, error) {
 	args := m.Called(ctx, limit, offset)
 	if args.Get(0) == nil {
 		return nil, args.Error(1)
 	}
-	return args.Get(0).([]*model.User), args.Error(1)
+	return args.Get(0).([]*dto.UserResponse), args.Error(1)
 }
 
-func (m *MockUserService) ListWithCount(ctx context.Context, limit, offset int) ([]*model.User, int, error) {
+func (m *MockUserService) ListWithCount(ctx context.Context, limit, offset int) ([]*dto.UserResponse, int, error) {
 	args := m.Called(ctx, limit, offset)
 	if args.Get(0) == nil {
-		return nil, 0, args.Error(1)
+		return nil, 0, args.Error(2)
 	}
-	return args.Get(0).([]*model.User), args.Int(1), args.Error(2)
+	return args.Get(0).([]*dto.UserResponse), args.Int(1), args.Error(2)
 }
 
 func (m *MockUserService) ValidateCredentials(ctx context.Context, email, password string) (*model.User, error) {
@@ -92,11 +92,6 @@ func (m *MockUserService) ValidateCredentials(ctx context.Context, email, passwo
 		return nil, args.Error(1)
 	}
 	return args.Get(0).(*model.User), args.Error(1)
-}
-
-func (m *MockUserService) UpdatePassword(ctx context.Context, id int64, newPassword string) error {
-	args := m.Called(ctx, id, newPassword)
-	return args.Error(0)
 }
 
 func newIntegrationHealthHandler(t *testing.T, cfg *config.Config) *httphandler.HealthHandler {
@@ -249,7 +244,7 @@ func TestUserCRUD(t *testing.T) {
 	})
 
 	t.Run("GetUser", func(t *testing.T) {
-		user := &model.User{
+		user := &dto.UserResponse{
 			ID:        1,
 			Email:     "test@example.com",
 			Name:      "Test User",
@@ -302,7 +297,7 @@ func TestUserCRUD(t *testing.T) {
 	})
 
 	t.Run("ListUsers", func(t *testing.T) {
-		users := []*model.User{
+		users := []*dto.UserResponse{
 			{ID: 1, Email: "user1@example.com", Name: "User 1"},
 			{ID: 2, Email: "user2@example.com", Name: "User 2"},
 		}
@@ -318,58 +313,13 @@ func TestUserCRUD(t *testing.T) {
 	})
 }
 
-func TestClientListUsersDeprecatedHeaders(t *testing.T) {
-	engine, mockService := setupTestRouter(t)
-	server := httptest.NewServer(engine)
-	defer server.Close()
-
-	users := []*model.User{{ID: 1, Email: "user1@example.com", Name: "User 1"}}
-	mockService.On("ListWithCount", mock.Anything, 10, 0).Return(users, 1, nil).Once()
-
-	resp, err := http.Get(server.URL + "/api/client/v1/users?page=1&limit=10")
-	assert.NoError(t, err)
-	defer resp.Body.Close()
-	assert.Equal(t, http.StatusOK, resp.StatusCode)
-	assert.Equal(t, "true", resp.Header.Get("Deprecation"))
-	assert.NotEmpty(t, resp.Header.Get("Sunset"))
-	assert.Contains(t, resp.Header.Get("Link"), router.PathClientV2Users)
-	io.Copy(io.Discard, resp.Body)
-
-	mockService.AssertExpectations(t)
-}
-
-func TestAdminGetUser(t *testing.T) {
-	engine, mockService := setupTestRouter(t)
-	server := httptest.NewServer(engine)
-	defer server.Close()
-
-	now := time.Now()
-	user := &model.User{
-		ID:        2,
-		Email:     "admin@example.com",
-		Name:      "Admin User",
-		Status:    1,
-		CreatedAt: now,
-		UpdatedAt: now,
-	}
-	mockService.On("GetByID", mock.Anything, int64(2)).Return(user, nil).Once()
-
-	resp, err := http.Get(server.URL + "/api/admin/v1/users/2")
-	assert.NoError(t, err)
-	defer resp.Body.Close()
-	assert.Equal(t, http.StatusOK, resp.StatusCode)
-	io.Copy(io.Discard, resp.Body)
-
-	mockService.AssertExpectations(t)
-}
-
 func TestInternalGetUserWithServiceKey(t *testing.T) {
 	engine, mockService := setupTestRouterWithInternalKey(t, "integration-internal-key")
 	server := httptest.NewServer(engine)
 	defer server.Close()
 
 	now := time.Now()
-	user := &model.User{
+	user := &dto.UserResponse{
 		ID:        3,
 		Email:     "internal@example.com",
 		Name:      "Internal User",

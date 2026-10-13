@@ -11,10 +11,8 @@ import (
 	redisrate "github.com/go-redis/redis_rate/v10"
 	"github.com/ilaziness/app-tpl/internal/auth"
 	"github.com/ilaziness/app-tpl/internal/config"
-	errcode "github.com/ilaziness/app-tpl/internal/errcode"
 	"github.com/ilaziness/app-tpl/internal/metrics"
 	httpmiddleware "github.com/ilaziness/app-tpl/internal/middleware/http"
-	"github.com/ilaziness/app-tpl/internal/response"
 	"github.com/ilaziness/app-tpl/internal/router"
 	"github.com/ilaziness/app-tpl/internal/tracing"
 	"github.com/redis/go-redis/v9"
@@ -31,11 +29,27 @@ type HTTPServer struct {
 	keyFile  string
 }
 
+// HTTPServerDeps groups dependencies for NewHTTPServer.
+type HTTPServerDeps struct {
+	Cfg          *config.Config
+	Logger       *zap.Logger
+	AccessLogger *zap.Logger // stdout-only recommended for Gin access logs
+	Handlers     *router.Handlers
+	Metrics      *metrics.Metrics
+	JWT          *auth.JWTManager
+	Redis        *redis.Client // optional; used when rate_limit.store=redis
+}
+
 // NewHTTPServer creates the HTTP server.
-// accessLogger is used for Gin access logs (stdout-only recommended).
-// logger is used for recovery / rate-limit warnings.
-// redisClient is optional; when rate_limit.store=redis and client is non-nil, Redis store is used.
-func NewHTTPServer(cfg *config.Config, logger *zap.Logger, accessLogger *zap.Logger, h *router.Handlers, m *metrics.Metrics, jwtMgr *auth.JWTManager, redisClient *redis.Client) (*HTTPServer, error) {
+func NewHTTPServer(deps HTTPServerDeps) (*HTTPServer, error) {
+	cfg := deps.Cfg
+	logger := deps.Logger
+	accessLogger := deps.AccessLogger
+	h := deps.Handlers
+	m := deps.Metrics
+	jwtMgr := deps.JWT
+	redisClient := deps.Redis
+
 	httpServer := &HTTPServer{
 		enabled: cfg.HTTP.Enabled,
 	}
@@ -105,20 +119,6 @@ func NewHTTPServer(cfg *config.Config, logger *zap.Logger, accessLogger *zap.Log
 		}
 		ginRouter.Use(httpmiddleware.RateLimit(rateCfg, logger))
 	}
-
-	// Always-on login rate limit (IP-based) for future auth routes.
-	loginStore := httpmiddleware.NewMemoryRateLimitStore(10000)
-	ginRouter.Use(func(c *gin.Context) {
-		if c.Request.Method == stdhttp.MethodPost && (c.Request.URL.Path == router.PathAdminV1+"/auth/login" || c.Request.URL.Path == router.PathClientV1+"/auth/login") {
-			ok, _, _, err := loginStore.Allow(c.Request.Context(), "login:"+c.ClientIP(), 5)
-			if err == nil && !ok {
-				response.Error(c, errcode.TooManyRequests)
-				c.Abort()
-				return
-			}
-		}
-		c.Next()
-	})
 
 	// Register routes
 	if err := router.RegisterRoutes(ginRouter, h); err != nil {

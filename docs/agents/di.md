@@ -8,11 +8,14 @@
 |------|------|
 | `internal/app/app.go` | `New()` 串联 infra/http/tcp/udp；`Run()` 管理生命周期 |
 | `internal/app/lifecycle.go` | `Hook`、`addHook`、`startHooks`、`stopHooks` |
-| `internal/app/infra.go` | logger、db、cache、event、tracing、metrics、auth 等基础设施 |
+| `internal/app/infra.go` | logger、db、共享 Redis、cache、event、tracing、metrics、auth；并调用 `wireScheduler` |
+| `internal/app/scheduler.go` | 定时任务（按配置启用） |
 | `internal/app/http.go` | 组装 `router.Handlers`、HTTPServer |
 | `internal/app/tcp.go` | TCP Server（按配置条件组装） |
 | `internal/app/udp.go` | UDP Server（按配置条件组装） |
-| `internal/server/http.go` | 接收 `*router.Handlers`，调用 `router.RegisterRoutes` 注册路由 |
+| `internal/server/http.go` | 接收 `HTTPServerDeps`，调用 `router.RegisterRoutes` 注册路由 |
+
+`pkg/payment`、`pkg/objectstorage`、`pkg/captcha`、`pkg/lock` 等为预留能力：样例可不注入；业务需要时在对应 `wire*` 中构造并注入 service。
 
 ## 生命周期 Hook
 
@@ -67,5 +70,5 @@ a.addHook(Hook{
 ## 约定
 
 - 各包只提供 `NewXxx(deps...)` 构造函数，通过参数声明依赖关系
-- 业务依赖禁止全局变量；配置加载后会有 `config.Cfg`，但业务层应通过构造函数注入获取依赖
+- 业务依赖禁止全局变量；`response.Configure` / `logger.Init` 仅用于 bootstrap；业务层通过构造函数注入
 - 新增业务模块时，在对应 `wire*` 方法中追加组装；不使用 Fx/Wire，也不新增 `module.go`

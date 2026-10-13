@@ -2,6 +2,8 @@ package cache
 
 import (
 	"fmt"
+
+	"github.com/redis/go-redis/v9"
 )
 
 // FactoryConfig configures a Factory. It is self-contained and does not
@@ -11,8 +13,11 @@ type FactoryConfig struct {
 	Driver  string // one of "memory" | "redis" | "multi" (ignored when Enabled is false)
 	Memory  MemoryCacheConfig
 	Redis   RedisCacheConfig
-	// RedisOptions is required when Driver is "redis" or "multi".
+	// RedisOptions is used when RedisClient is nil and Driver is "redis" or "multi".
 	RedisOptions RedisOptions
+	// RedisClient is an optional shared client. When set, the cache does not own
+	// or close it (prefer this in app wiring to avoid dual Redis connections).
+	RedisClient *redis.Client
 }
 
 // Factory builds a Cache based on FactoryConfig.
@@ -23,6 +28,13 @@ type Factory struct {
 // NewFactory creates a Factory.
 func NewFactory(cfg FactoryConfig) *Factory {
 	return &Factory{cfg: cfg}
+}
+
+func (f *Factory) newRedisLayer() (*RedisCache, error) {
+	if f.cfg.RedisClient != nil {
+		return NewRedisCacheFromClient(f.cfg.Redis, f.cfg.RedisClient)
+	}
+	return NewRedisCache(f.cfg.Redis, f.cfg.RedisOptions)
 }
 
 // Create returns a Cache instance. When Enabled is false, a NopCache is
@@ -36,13 +48,13 @@ func (f *Factory) Create() (Cache, error) {
 	case "memory":
 		return NewMemoryCache(f.cfg.Memory)
 	case "redis":
-		return NewRedisCache(f.cfg.Redis, f.cfg.RedisOptions)
+		return f.newRedisLayer()
 	case "multi":
 		l1, err := NewMemoryCache(f.cfg.Memory)
 		if err != nil {
 			return nil, err
 		}
-		l2, err := NewRedisCache(f.cfg.Redis, f.cfg.RedisOptions)
+		l2, err := f.newRedisLayer()
 		if err != nil {
 			_ = l1.Close()
 			return nil, err

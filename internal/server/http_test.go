@@ -16,7 +16,10 @@ func TestNewHTTPServer_invalidHandlers(t *testing.T) {
 	}
 	logger := zap.NewNop()
 
-	_, err := NewHTTPServer(cfg, logger, logger, nil, nil, nil, nil)
+	_, err := NewHTTPServer(HTTPServerDeps{
+		Cfg:    cfg,
+		Logger: logger,
+	})
 	require.Error(t, err)
 }
 
@@ -30,7 +33,11 @@ func TestNewHTTPServer_registersRoutes(t *testing.T) {
 	handlers, err := router.NewHandlers(health, httphandler.NewUserHandler(nil))
 	require.NoError(t, err)
 
-	srv, err := NewHTTPServer(cfg, logger, logger, handlers, nil, nil, nil)
+	srv, err := NewHTTPServer(HTTPServerDeps{
+		Cfg:      cfg,
+		Logger:   logger,
+		Handlers: handlers,
+	})
 	require.NoError(t, err)
 	require.NotNil(t, srv.Router())
 
@@ -38,6 +45,7 @@ func TestNewHTTPServer_registersRoutes(t *testing.T) {
 	for _, route := range srv.Router().Routes() {
 		registered[route.Path] = true
 	}
-	require.True(t, registered[router.PathAdminV1Users+"/:id"])
+	require.True(t, registered[router.PathClientV1Users+"/:id"])
 	require.True(t, registered[router.PathInternalV1Users+"/:id"])
+	require.False(t, registered[router.PathAdminV1Users+"/:id"])
 }

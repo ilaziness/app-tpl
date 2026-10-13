@@ -34,7 +34,6 @@ func setupTestRedisClient(t *testing.T) *redis.Client {
 }
 
 func TestRedisLockProvider_AcquireAndRelease(t *testing.T) {
-	initLoggerForTest(t)
 	ctx := context.Background()
 
 	client := setupTestRedisClient(t)
@@ -75,7 +74,6 @@ func TestRedisLockProvider_AcquireAndRelease(t *testing.T) {
 }
 
 func TestRedisLockProvider_MutualExclusion(t *testing.T) {
-	initLoggerForTest(t)
 	ctx := context.Background()
 
 	client := setupTestRedisClient(t)
@@ -111,7 +109,6 @@ func TestRedisLockProvider_MutualExclusion(t *testing.T) {
 }
 
 func TestRedisLockProvider_Renew(t *testing.T) {
-	initLoggerForTest(t)
 	ctx := context.Background()
 
 	client := setupTestRedisClient(t)
@@ -130,7 +127,6 @@ func TestRedisLockProvider_Renew(t *testing.T) {
 }
 
 func TestRedisLockProvider_RenewWithoutAcquire(t *testing.T) {
-	initLoggerForTest(t)
 	ctx := context.Background()
 
 	client := setupTestRedisClient(t)
@@ -149,10 +145,9 @@ func TestRedisLockProvider_RenewWithoutAcquire(t *testing.T) {
 // TestNewScheduler_NilClientUsesNoopLock 验证 NewScheduler 在 redisClient 为 nil 时
 // 使用 NoopLockProvider（空锁），不 panic、不启动心跳。
 func TestNewScheduler_NilClientUsesNoopLock(t *testing.T) {
-	initLoggerForTest(t)
 	ctx := context.Background()
 
-	sched := NewScheduler(nil)
+	sched := NewScheduler(nil, nil)
 	job := &mockJob{}
 	sched.Register(job)
 
@@ -174,7 +169,6 @@ func TestNewScheduler_NilClientUsesNoopLock(t *testing.T) {
 }
 
 func TestRedisLockProvider_ReleaseWithoutAcquire(t *testing.T) {
-	initLoggerForTest(t)
 	ctx := context.Background()
 
 	client := setupTestRedisClient(t)

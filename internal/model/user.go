@@ -2,6 +2,7 @@
 package model
 
 import (
+	"context"
 	"time"
 
 	"github.com/uptrace/bun"
@@ -20,4 +21,18 @@ type User struct {
 	CreatedAt time.Time `bun:"created_at,nullzero,notnull,default:current_timestamp" json:"created_at"`
 	UpdatedAt time.Time `bun:"updated_at,nullzero,notnull,default:current_timestamp" json:"updated_at"`
 	DeletedAt time.Time `bun:"deleted_at,nullzero" json:"deleted_at,omitempty"`
+}
+
+var _ bun.BeforeAppendModelHook = (*User)(nil)
+
+func (m *User) BeforeAppendModel(ctx context.Context, query bun.Query) error {
+	now := time.Now()
+	switch query.(type) {
+	case *bun.InsertQuery:
+		m.CreatedAt = now
+		m.UpdatedAt = now
+	case *bun.UpdateQuery:
+		m.UpdatedAt = now
+	}
+	return nil
 }

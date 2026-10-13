@@ -55,7 +55,7 @@ func TestRegisterRoutes_registersSystemHealthRoutes(t *testing.T) {
 	require.Equal(t, http.StatusNotFound, w.Code)
 }
 
-func TestRegisterRoutes_registersClientAdminInternalUserRoutes(t *testing.T) {
+func TestRegisterRoutes_registersClientAndInternalUserRoutes(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
 	engine := gin.New()
@@ -76,9 +76,6 @@ func TestRegisterRoutes_registersClientAdminInternalUserRoutes(t *testing.T) {
 		{http.MethodGet, PathClientV1Users + "/:id"},
 		{http.MethodPost, PathClientV1Users},
 		{http.MethodGet, PathClientV1Users},
-		{http.MethodGet, PathClientV2Users + "/:id"},
-		{http.MethodGet, PathAdminV1Users + "/:id"},
-		{http.MethodPost, PathAdminV1Users},
 		{http.MethodGet, PathInternalV1Users + "/:id"},
 		{http.MethodGet, PathSwagger},
 	}
@@ -87,4 +84,7 @@ func TestRegisterRoutes_registersClientAdminInternalUserRoutes(t *testing.T) {
 		require.True(t, ok, "path %s should be registered", route.path)
 		require.True(t, methods[route.method], "method %s %s should be registered", route.method, route.path)
 	}
+
+	require.False(t, registered[PathAdminV1Users+"/:id"][http.MethodGet], "admin user sample routes should not be registered")
+	require.False(t, registered[PathClientV2Users+"/:id"][http.MethodGet], "client v2 sample CRUD should not be registered")
 }

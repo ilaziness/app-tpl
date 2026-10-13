@@ -6,12 +6,17 @@ import (
 
 	"github.com/ilaziness/app-tpl/internal/config"
 	pkgcache "github.com/ilaziness/app-tpl/pkg/cache"
+	"github.com/redis/go-redis/v9"
 )
 
 // NewManagerFromConfig builds a Manager from the application config. It maps
 // the Viper-loaded config structs to pkg/cache's self-contained config types,
 // keeping pkg/cache decoupled from internal/config.
-func NewManagerFromConfig(cfg *config.Config) (*Manager, error) {
+//
+// redisClient is optional. When the cache driver needs Redis and redisClient
+// is non-nil, the shared client is reused (App owns Close). When nil and Redis
+// is required, pkg/cache creates its own connection from cfg.Redis.
+func NewManagerFromConfig(cfg *config.Config, redisClient *redis.Client) (*Manager, error) {
 	factoryCfg := pkgcache.FactoryConfig{
 		Enabled: cfg.Cache.Enabled,
 		Driver:  cfg.Cache.Driver,
@@ -24,8 +29,9 @@ func NewManagerFromConfig(cfg *config.Config) (*Manager, error) {
 			KeyPrefix:  cfg.Cache.Redis.KeyPrefix,
 			DefaultTTL: time.Duration(cfg.Cache.Redis.DefaultTTL) * time.Second,
 		},
+		RedisClient: redisClient,
 	}
-	if cfg.Redis.Enabled {
+	if redisClient == nil && cfg.Redis.Enabled {
 		factoryCfg.RedisOptions = pkgcache.RedisOptions{
 			Addr:            fmt.Sprintf("%s:%d", cfg.Redis.Host, cfg.Redis.Port),
 			Password:        cfg.Redis.Password,

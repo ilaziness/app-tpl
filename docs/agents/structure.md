@@ -14,8 +14,8 @@ app-tpl/
 ├── scripts/                         # 构建、部署、测试脚本
 ├── data/                            # 本地运行时数据（如 SQLite 文件）
 ├── test/                            # 集成测试
-├── pkg/                             # 可复用的通用包（不依赖 internal）
-│   ├── cache/                       # 通用缓存原语
+├── pkg/                             # 预留公共能力（不依赖 internal；样例可不接线）
+│   ├── cache/                       # 通用缓存原语（样例经 internal/cache 使用）
 │   ├── captcha/                     # 验证码抽象（PNG / 可扩展）
 │   ├── event/                       # 通用事件总线
 │   ├── lock/                        # 分布式锁（Redis / 内存）

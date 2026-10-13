@@ -7,8 +7,6 @@ import (
 	"sync/atomic"
 	"testing"
 	"time"
-
-	"github.com/ilaziness/app-tpl/internal/logger"
 )
 
 // mockLockProvider is a test mock for LockProvider.
@@ -81,25 +79,11 @@ func (j *mockJob) Init(ctx context.Context, sched *Scheduler) error {
 	return j.initErr
 }
 
-// initLoggerForTest initializes the global logger to avoid nil panic in tests.
-func initLoggerForTest(t *testing.T) {
-	t.Helper()
-	if logger.Log != nil {
-		return
-	}
-	logInst, err := logger.New(logger.Config{Level: "debug", Output: "stdout"})
-	if err != nil {
-		t.Fatalf("failed to init logger: %v", err)
-	}
-	logger.Log = logInst
-}
-
 func TestScheduler_StartWithoutLock(t *testing.T) {
-	initLoggerForTest(t)
 	ctx := context.Background()
 
 	// No LockProvider (single-instance mode)
-	sched := newSchedulerWithLock(nil)
+	sched := newSchedulerWithLock(nil, nil)
 	job := &mockJob{}
 	sched.Register(job)
 
@@ -125,10 +109,10 @@ func TestScheduler_StartWithoutLock(t *testing.T) {
 // TestScheduler_WithNoopLockProvider verifies that NoopLockProvider works as a single-instance
 // lock: Acquire always succeeds, no heartbeat goroutine is started, Stop is clean.
 func TestScheduler_WithNoopLockProvider(t *testing.T) {
-	initLoggerForTest(t)
+
 	ctx := context.Background()
 
-	sched := newSchedulerWithLock(NoopLockProvider{})
+	sched := newSchedulerWithLock(NoopLockProvider{}, nil)
 	job := &mockJob{}
 	sched.Register(job)
 
@@ -158,11 +142,11 @@ func TestScheduler_WithNoopLockProvider(t *testing.T) {
 }
 
 func TestScheduler_StartWithLock_Acquired(t *testing.T) {
-	initLoggerForTest(t)
+
 	ctx := context.Background()
 
 	lock := &mockLockProvider{}
-	sched := newSchedulerWithLock(lock)
+	sched := newSchedulerWithLock(lock, nil)
 	job := &mockJob{}
 	sched.Register(job)
 
@@ -191,14 +175,14 @@ func TestScheduler_StartWithLock_Acquired(t *testing.T) {
 }
 
 func TestScheduler_StartWithLock_AlreadyHeld(t *testing.T) {
-	initLoggerForTest(t)
+
 	ctx := context.Background()
 
 	lock := &mockLockProvider{}
 	// Pre-occupy the lock
 	lock.locked = true
 
-	sched := newSchedulerWithLock(lock)
+	sched := newSchedulerWithLock(lock, nil)
 	job := &mockJob{}
 	sched.Register(job)
 
@@ -224,11 +208,11 @@ func TestScheduler_StartWithLock_AlreadyHeld(t *testing.T) {
 }
 
 func TestScheduler_StartWithLock_AcquireError(t *testing.T) {
-	initLoggerForTest(t)
+
 	ctx := context.Background()
 
 	lock := &mockLockProvider{acquireErr: errors.New("redis down")}
-	sched := newSchedulerWithLock(lock)
+	sched := newSchedulerWithLock(lock, nil)
 	job := &mockJob{}
 	sched.Register(job)
 
@@ -245,11 +229,11 @@ func TestScheduler_StartWithLock_AcquireError(t *testing.T) {
 }
 
 func TestScheduler_StartJobInitFailure_ReleasesLock(t *testing.T) {
-	initLoggerForTest(t)
+
 	ctx := context.Background()
 
 	lock := &mockLockProvider{}
-	sched := newSchedulerWithLock(lock)
+	sched := newSchedulerWithLock(lock, nil)
 	job := &mockJob{initErr: errors.New("init failed")}
 	sched.Register(job)
 
@@ -266,10 +250,10 @@ func TestScheduler_StartJobInitFailure_ReleasesLock(t *testing.T) {
 }
 
 func TestScheduler_StopWithoutStart(t *testing.T) {
-	initLoggerForTest(t)
+
 	ctx := context.Background()
 
-	sched := newSchedulerWithLock(nil)
+	sched := newSchedulerWithLock(nil, nil)
 	// Stop without Start should be safe
 	if err := sched.Stop(ctx); err != nil {
 		t.Fatalf("Stop without Start should not error: %v", err)
@@ -277,13 +261,13 @@ func TestScheduler_StopWithoutStart(t *testing.T) {
 }
 
 func TestScheduler_StopReleasesLock_AllowsOtherInstance(t *testing.T) {
-	initLoggerForTest(t)
+
 	ctx := context.Background()
 
 	lock := &mockLockProvider{}
 
 	// Instance 1 starts and acquires lock
-	sched1 := newSchedulerWithLock(lock)
+	sched1 := newSchedulerWithLock(lock, nil)
 	if err := sched1.Start(ctx); err != nil {
 		t.Fatalf("sched1 Start failed: %v", err)
 	}
@@ -292,7 +276,7 @@ func TestScheduler_StopReleasesLock_AllowsOtherInstance(t *testing.T) {
 	}
 
 	// Instance 2 tries to start, should skip due to lock held
-	sched2 := newSchedulerWithLock(lock)
+	sched2 := newSchedulerWithLock(lock, nil)
 	if err := sched2.Start(ctx); err != nil {
 		t.Fatalf("sched2 Start failed: %v", err)
 	}
@@ -309,7 +293,7 @@ func TestScheduler_StopReleasesLock_AllowsOtherInstance(t *testing.T) {
 	}
 
 	// Instance 3 should now acquire lock and start
-	sched3 := newSchedulerWithLock(lock)
+	sched3 := newSchedulerWithLock(lock, nil)
 	if err := sched3.Start(ctx); err != nil {
 		t.Fatalf("sched3 Start failed: %v", err)
 	}
@@ -326,11 +310,11 @@ func TestScheduler_StopReleasesLock_AllowsOtherInstance(t *testing.T) {
 // releaseLock's <-heartbeatDone blocks until heartbeat goroutine exits;
 // if heartbeat doesn't stop, this test exposes the issue via Stop timeout.
 func TestScheduler_HeartbeatStopsOnRelease(t *testing.T) {
-	initLoggerForTest(t)
+
 	ctx := context.Background()
 
 	lock := &mockLockProvider{}
-	sched := newSchedulerWithLock(lock)
+	sched := newSchedulerWithLock(lock, nil)
 	job := &mockJob{}
 	sched.Register(job)
 
@@ -363,12 +347,12 @@ func TestScheduler_HeartbeatStopsOnRelease(t *testing.T) {
 // Scenario: Renew returns ErrLockNotHeld (lock expired or preempted),
 // heartbeat should stop cron and exit to avoid split-brain.
 func TestScheduler_HeartbeatStopsCronOnLockLoss(t *testing.T) {
-	initLoggerForTest(t)
+
 	ctx := context.Background()
 
 	// renewErr = ErrLockNotHeld simulates lock loss
 	lock := &mockLockProvider{renewErr: ErrLockNotHeld}
-	sched := newSchedulerWithLock(lock)
+	sched := newSchedulerWithLock(lock, nil)
 	sched.lockRenewInterval = 50 * time.Millisecond // short interval for fast test
 	job := &mockJob{}
 	sched.Register(job)
@@ -404,11 +388,11 @@ func TestScheduler_HeartbeatStopsCronOnLockLoss(t *testing.T) {
 // TestScheduler_StopAfterHeartbeatStoppedCron verifies Stop idempotency after heartbeat stopped cron.
 // After heartbeat stops cron due to lock loss, Stop should not re-stop cron but should release lock.
 func TestScheduler_StopAfterHeartbeatStoppedCron(t *testing.T) {
-	initLoggerForTest(t)
+
 	ctx := context.Background()
 
 	lock := &mockLockProvider{renewErr: ErrLockNotHeld}
-	sched := newSchedulerWithLock(lock)
+	sched := newSchedulerWithLock(lock, nil)
 	sched.lockRenewInterval = 50 * time.Millisecond // short interval for fast test
 	job := &mockJob{}
 	sched.Register(job)

@@ -7,7 +7,7 @@ A flexible Go application template framework that supports multiple service type
 - **Multi-protocol support**: HTTP, TCP, UDP services
 - **Custom binary protocol**: TCP/UDP with JSON and Gob encoding support
 - **Modular design**: Enable only what you need
-- **Dependency injection**: Using Uber Fx
+- **Dependency injection**: Manual constructor injection in `internal/app`
 - **Configuration management**: YAML/JSON with environment variable override for sensitive data only
 - **Structured logging**: Zap with log rotation
 - **Graceful shutdown**: Signal handling and resource cleanup
@@ -17,6 +17,7 @@ A flexible Go application template framework that supports multiple service type
 - **Database migrations**: Built-in migration tool for schema management
 - **Code generation**: Model generation from database tables
 - **Observability**: Configurable distributed tracing (OpenTelemetry) and metrics (Prometheus)
+- **Optional packages**: `pkg/payment`, `pkg/objectstorage`, `pkg/captcha`, `pkg/lock`, `pkg/event` are reusable building blocks — the sample app demonstrates basic HTTP/CRUD flow and does not wire every package
 
 ## Quick Start
 

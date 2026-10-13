@@ -1,24 +1,19 @@
 # Service Layer
 
-This directory contains business logic layer implementations.
-
-## Purpose
-
-The service layer implements business logic and coordinates between handlers and repositories.
-
-## Phase 2 Implementation
-
-This directory is a placeholder for Phase 2 database integration. Example structure:
-
-```
-service/
-├── user.go          # User service
-└── order.go         # Order service
-```
+Business logic lives here. Handlers call services; services call repositories and optional infra (cache, lock, etc.).
 
 ## Guidelines
 
-- Services should contain business logic only
-- Use dependency injection (Fx) to inject repositories
-- Services should be stateless where possible
-- Return domain-specific errors using the internal/errors package
+- Keep business rules in services; keep HTTP binding in handlers
+- Inject dependencies via constructors (wired in `internal/app`)
+- Prefer returning DTOs for HTTP-facing methods
+- Map persistence errors to `internal/errcode` at the service or repository boundary
+- Do not set `created_at` / `updated_at` manually when the model implements Bun `BeforeAppendModelHook`
+
+## Sample
+
+`user.go` demonstrates Create / Get / Update / Delete / List with cache-aside on read paths (password never cached).
+
+## Multi API surface
+
+The sample stays flat. When admin and client diverge, split into `service/admin` and `service/client` packages (see AGENTS.md). Shared logic can stay in the root `service` package.

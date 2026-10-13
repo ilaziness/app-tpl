@@ -60,15 +60,10 @@ func del(m *Manager, ctx context.Context, spec KeySpec, parts ...string) error {
 	return m.cache.Delete(ctx, key)
 }
 
-// decodeAs converts the cached any into T. MemoryCache stores the raw value
-// (so a direct type assertion succeeds), while RedisCache returns a JSON-
-// unmarshaled any (e.g. map[string]any for structs) which requires a JSON
-// round-trip to reach T.
+// decodeAs converts the cached any into T via a JSON round-trip so Memory
+// (raw values) and Redis (JSON-decoded maps) share one decoding path.
 func decodeAs[T any](val any) (T, error) {
 	var zero T
-	if v, ok := val.(T); ok {
-		return v, nil
-	}
 	data, err := json.Marshal(val)
 	if err != nil {
 		return zero, fmt.Errorf("cache: failed to marshal cached value: %w", err)

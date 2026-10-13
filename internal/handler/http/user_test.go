@@ -34,12 +34,12 @@ func (m *MockUserService) Create(ctx context.Context, req *dto.CreateUserRequest
 	return args.Get(0).(*dto.UserResponse), args.Error(1)
 }
 
-func (m *MockUserService) GetByID(ctx context.Context, id int64) (*model.User, error) {
+func (m *MockUserService) GetByID(ctx context.Context, id int64) (*dto.UserResponse, error) {
 	args := m.Called(ctx, id)
 	if args.Get(0) == nil {
 		return nil, args.Error(1)
 	}
-	return args.Get(0).(*model.User), args.Error(1)
+	return args.Get(0).(*dto.UserResponse), args.Error(1)
 }
 
 func (m *MockUserService) GetByEmail(ctx context.Context, email string) (*model.User, error) {
@@ -71,20 +71,20 @@ func (m *MockUserService) Delete(ctx context.Context, id int64) error {
 	return args.Error(0)
 }
 
-func (m *MockUserService) List(ctx context.Context, limit, offset int) ([]*model.User, error) {
+func (m *MockUserService) List(ctx context.Context, limit, offset int) ([]*dto.UserResponse, error) {
 	args := m.Called(ctx, limit, offset)
 	if args.Get(0) == nil {
 		return nil, args.Error(1)
 	}
-	return args.Get(0).([]*model.User), args.Error(1)
+	return args.Get(0).([]*dto.UserResponse), args.Error(1)
 }
 
-func (m *MockUserService) ListWithCount(ctx context.Context, limit, offset int) ([]*model.User, int, error) {
+func (m *MockUserService) ListWithCount(ctx context.Context, limit, offset int) ([]*dto.UserResponse, int, error) {
 	args := m.Called(ctx, limit, offset)
 	if args.Get(0) == nil {
 		return nil, args.Int(1), args.Error(2)
 	}
-	return args.Get(0).([]*model.User), args.Int(1), args.Error(2)
+	return args.Get(0).([]*dto.UserResponse), args.Int(1), args.Error(2)
 }
 
 func setupTestHandler() (*UserHandler, *MockUserService, *gin.Engine) {
@@ -107,7 +107,7 @@ func TestUserHandler_GetUser(t *testing.T) {
 			name: "获取用户成功",
 			id:   "1",
 			mockFn: func(m *MockUserService) {
-				user := &model.User{
+				user := &dto.UserResponse{
 					ID:        1,
 					Email:     "test@example.com",
 					Name:      "Test User",
@@ -361,7 +361,7 @@ func TestUserHandler_ListUsers(t *testing.T) {
 			name:  "获取用户列表成功",
 			query: "?page=1&limit=10",
 			mockFn: func(m *MockUserService) {
-				users := []*model.User{
+				users := []*dto.UserResponse{
 					{ID: 1, Email: "user1@example.com", Name: "User 1"},
 					{ID: 2, Email: "user2@example.com", Name: "User 2"},
 				}
@@ -392,7 +392,7 @@ func TestUserHandler_ListUsers(t *testing.T) {
 			name:  "第二页",
 			query: "?page=2&limit=5",
 			mockFn: func(m *MockUserService) {
-				m.On("ListWithCount", mock.Anything, 5, 5).Return([]*model.User{}, 0, nil)
+				m.On("ListWithCount", mock.Anything, 5, 5).Return([]*dto.UserResponse{}, 0, nil)
 			},
 			wantStatus: http.StatusOK,
 			checkBody: func(t *testing.T, body []byte) {
@@ -415,7 +415,7 @@ func TestUserHandler_ListUsers(t *testing.T) {
 			name:  "默认分页参数",
 			query: "",
 			mockFn: func(m *MockUserService) {
-				m.On("ListWithCount", mock.Anything, 10, 0).Return([]*model.User{}, 0, nil)
+				m.On("ListWithCount", mock.Anything, 10, 0).Return([]*dto.UserResponse{}, 0, nil)
 			},
 			wantStatus: http.StatusOK,
 			checkBody:  func(t *testing.T, body []byte) {},

@@ -29,13 +29,15 @@ type RedisOptions struct {
 
 // RedisCache is a Cache backed by Redis.
 type RedisCache struct {
-	client *redis.Client
-	prefix string
-	ttl    time.Duration
+	client     *redis.Client
+	prefix     string
+	ttl        time.Duration
+	ownsClient bool // when false, Close does not close the shared client
 }
 
 // NewRedisCache creates a RedisCache. It pings Redis once to verify
 // connectivity and returns an error if the server is unreachable.
+// The returned cache owns the client and closes it on Close.
 func NewRedisCache(cacheConfig RedisCacheConfig, opts RedisOptions) (*RedisCache, error) {
 	client := redis.NewClient(&redis.Options{
 		Addr:            opts.Addr,
@@ -53,6 +55,19 @@ func NewRedisCache(cacheConfig RedisCacheConfig, opts RedisOptions) (*RedisCache
 		return nil, fmt.Errorf("failed to connect to Redis: %w", err)
 	}
 
+	return newRedisCache(cacheConfig, client, true), nil
+}
+
+// NewRedisCacheFromClient wraps an existing Redis client. Close will not
+// close the client; the caller owns its lifecycle.
+func NewRedisCacheFromClient(cacheConfig RedisCacheConfig, client *redis.Client) (*RedisCache, error) {
+	if client == nil {
+		return nil, fmt.Errorf("redis client is required")
+	}
+	return newRedisCache(cacheConfig, client, false), nil
+}
+
+func newRedisCache(cacheConfig RedisCacheConfig, client *redis.Client, ownsClient bool) *RedisCache {
 	prefix := "app:"
 	if cacheConfig.KeyPrefix != "" {
 		prefix = cacheConfig.KeyPrefix
@@ -64,10 +79,11 @@ func NewRedisCache(cacheConfig RedisCacheConfig, opts RedisOptions) (*RedisCache
 	}
 
 	return &RedisCache{
-		client: client,
-		prefix: prefix,
-		ttl:    defaultTTL,
-	}, nil
+		client:     client,
+		prefix:     prefix,
+		ttl:        defaultTTL,
+		ownsClient: ownsClient,
+	}
 }
 
 // buildKey applies the configured prefix to the key.
@@ -196,7 +212,10 @@ func (c *RedisCache) Clear(ctx context.Context) error {
 	return nil
 }
 
-// Close implements Cache.
+// Close implements Cache. Shared clients (NewRedisCacheFromClient) are left open.
 func (c *RedisCache) Close() error {
+	if !c.ownsClient {
+		return nil
+	}
 	return c.client.Close()
 }
