@@ -75,13 +75,13 @@ redis:
 
 ### 3. 环境变量配置
 
-创建 `.env` 文件（仅用于敏感信息）：
+创建 `configs/.env` 文件（仅用于敏感信息）：
 
 ```bash
-cp .env.example .env
+cp configs/.env.example configs/.env
 ```
 
-编辑 `.env`：
+编辑 `configs/.env`：
 
 ```bash
 DATABASE_PASSWORD=your_secure_password
@@ -230,22 +230,15 @@ docker run -d \
 
 ### 3. 环境变量配置
 
-通过 `-e` 参数传递环境变量：
+通过 `-e` 仅传递敏感字段（其余配置写在 `configs/*.yaml`）：
 
 ```bash
 docker run -d \
   --name app-tpl \
   -p 8080:8080 \
-  -e DATABASE_ENABLED=true \
-  -e DATABASE_DRIVER=mysql \
-  -e DATABASE_HOST=db \
-  -e DATABASE_PORT=3306 \
-  -e DATABASE_DATABASE=myapp \
-  -e DATABASE_USER=myapp \
+  -v $(pwd)/configs:/app/configs \
   -e DATABASE_PASSWORD=your_password \
-  -e REDIS_ENABLED=true \
-  -e REDIS_HOST=redis \
-  -e REDIS_PORT=6379 \
+  -e REDIS_PASSWORD=your_redis_password \
   app-tpl:1.0.0
 ```
 

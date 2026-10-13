@@ -113,21 +113,11 @@ make build
 环境变量仅用于敏感数据：
 
 ```bash
-# 数据库配置
-export DATABASE_ENABLED=true
-export DATABASE_DRIVER=sqlite
-export DATABASE_DATABASE=./data/app.db
-export DATABASE_USER=
 export DATABASE_PASSWORD=
-
-# Redis 配置
-export REDIS_ENABLED=false
-export REDIS_HOST=localhost
-export REDIS_PORT=6379
 export REDIS_PASSWORD=
 ```
 
-查看 `.env.example` 获取所有可用的环境变量。
+查看 `configs/.env.example` 获取可用的环境变量。
 
 ## 数据库集成
 
@@ -253,7 +243,6 @@ database:
 │       └── user.go       # 用户 DTO
 ├── main.go               # 应用入口
 ├── Makefile              # 构建命令
-├── .env.example          # 环境变量示例
 └── README.md             # 本文件
 ```
 

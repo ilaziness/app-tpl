@@ -114,21 +114,11 @@ Configuration can be provided via:
 Environment variables are only used for sensitive data:
 
 ```bash
-# Database configuration
-export DATABASE_ENABLED=true
-export DATABASE_DRIVER=sqlite
-export DATABASE_DATABASE=./data/app.db
-export DATABASE_USER=
 export DATABASE_PASSWORD=
-
-# Redis configuration
-export REDIS_ENABLED=false
-export REDIS_HOST=localhost
-export REDIS_PORT=6379
 export REDIS_PASSWORD=
 ```
 
-See `.env.example` for all available environment variables.
+See `configs/.env.example` for available environment variables.
 
 ## Database Integration
 
@@ -254,7 +244,6 @@ database:
 │       └── user.go       # User DTOs
 ├── main.go               # Application entry point
 ├── Makefile              # Build commands
-├── .env.example          # Environment variables example
 └── README.md             # This file
 ```
 

@@ -20,10 +20,9 @@ services:
       - app-logs:/app/logs
     environment:
       - TZ=Asia/Shanghai
-      - DATABASE_ENABLED=${DATABASE_ENABLED:-true}
-      - DATABASE_DRIVER=${DATABASE_DRIVER:-sqlite}
-      - DATABASE_DATABASE=/app/data/app.db
-      - REDIS_ENABLED=${REDIS_ENABLED:-false}
+      # Sensitive overrides only (driver/host/db name come from configs/*.yaml)
+      - DATABASE_PASSWORD=${DATABASE_PASSWORD:-}
+      - REDIS_PASSWORD=${REDIS_PASSWORD:-}
     networks:
       - app-network
     healthcheck:

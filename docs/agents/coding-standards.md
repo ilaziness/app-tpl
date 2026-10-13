@@ -20,7 +20,7 @@
 加载逻辑见 `internal/config/config.go` 的 `LoadWithEnv`：
 
 1. **环境判定**：`-e/--env` > 环境变量 `APP_ENV` > 默认 `dev`
-2. **dotenv**：按环境加载 `.env.{env}`、`configs/.env.{env}`、`.env`、`configs/.env`（文件缺失不报错）
+2. **dotenv**：按环境加载 `.env.{env}`、`configs/.env.{env}`、`.env`、`configs/.env`（文件缺失不报错；`godotenv.Load` 不覆盖已有变量，先加载优先）
 3. **主配置**：指定 `-c/--config` 时加载该文件；未指定时加载 `configs/config.yaml`
 4. **环境覆盖**：合并 `configs/config.{env}.yaml`（存在则 merge）
 5. **敏感字段**：`DATABASE_PASSWORD`、`REDIS_PASSWORD` 通过 Viper 绑定环境变量覆盖
