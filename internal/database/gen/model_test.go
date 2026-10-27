@@ -239,3 +239,48 @@ func TestGenerateModelCode_noHookWithoutTimestampColumns(t *testing.T) {
 	assert.NotContains(t, code, "BeforeAppendModel")
 	assert.NotContains(t, code, `"context"`)
 }
+
+func TestGenerateModelCode_addsSoftDeleteTag(t *testing.T) {
+	code := GenerateModelCode(GenerateOptions{
+		PackageName: "model",
+		JSONTags:    true,
+	}, "Users", "users", []Column{
+		{Name: "id", Type: "bigint", Nullable: false, PrimaryKey: true, AutoIncrement: true},
+		{Name: "email", Type: "varchar", Nullable: false},
+		{Name: "created_at", Type: "datetime", Nullable: false},
+		{Name: "updated_at", Type: "datetime", Nullable: false},
+		{Name: "deleted_at", Type: "datetime", Nullable: true},
+	}, nil)
+
+	assert.Contains(t, code, "\tDeletedAt *time.Time `bun:\"deleted_at,soft_delete,nullzero\" json:\"deleted_at\"`")
+	assert.Contains(t, code, "var _ bun.BeforeAppendModelHook = (*Users)(nil)")
+	assert.Contains(t, code, "case *bun.InsertQuery:")
+	assert.Contains(t, code, "case *bun.UpdateQuery:")
+	assert.NotContains(t, code, "m.DeletedAt")
+}
+
+func TestGenerateModelCode_noSoftDeleteWithoutDeletedAt(t *testing.T) {
+	code := GenerateModelCode(GenerateOptions{
+		PackageName: "model",
+		JSONTags:    true,
+	}, "SampleItem", "sample_items", []Column{
+		{Name: "id", Type: "INTEGER", Nullable: false, PrimaryKey: true, AutoIncrement: true},
+		{Name: "title", Type: "TEXT", Nullable: false},
+	}, nil)
+
+	assert.NotContains(t, code, "soft_delete")
+	assert.NotContains(t, code, "DeletedAt")
+}
+
+func TestGenerateModelCode_noSoftDeleteForNonNullableDeletedAt(t *testing.T) {
+	code := GenerateModelCode(GenerateOptions{
+		PackageName: "model",
+		JSONTags:    true,
+	}, "Users", "users", []Column{
+		{Name: "id", Type: "bigint", Nullable: false, PrimaryKey: true, AutoIncrement: true},
+		{Name: "deleted_at", Type: "datetime", Nullable: false},
+	}, nil)
+
+	assert.Contains(t, code, "\tDeletedAt time.Time `bun:\"deleted_at,notnull\" json:\"deleted_at\"`")
+	assert.NotContains(t, code, "soft_delete")
+}

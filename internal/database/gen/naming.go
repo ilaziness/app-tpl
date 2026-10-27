@@ -225,6 +225,10 @@ func GenerateModelCode(opts GenerateOptions, modelName, tableName string, column
 				bunTag += ",unique"
 			}
 		}
+		// soft_delete+nullzero → Bun filters with IS NULL; only safe for nullable columns.
+		if col.Name == "deleted_at" && col.Nullable {
+			bunTag += ",soft_delete,nullzero"
+		}
 		tags := []string{fmt.Sprintf(`bun:"%s"`, bunTag)}
 		if opts.JSONTags {
 			// Prefer DB column names (already snake_case); hide sensitive fields.
