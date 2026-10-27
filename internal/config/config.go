@@ -44,8 +44,7 @@ type Config struct {
 
 // SchedulerConfig 定时任务调度配置。
 type SchedulerConfig struct {
-	Enabled         bool `mapstructure:"enabled"`           // 是否启用调度器
-	RegisterDemoJob bool `mapstructure:"register_demo_job"` // 是否注册无业务 demo Job
+	Enabled bool `mapstructure:"enabled"` // 是否启用调度器
 }
 
 // CaptchaConfig 验证码配置骨架（pkg/captcha；业务在 wireHTTP 注入时再读取）。
@@ -544,7 +543,6 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("metrics.path", "/metrics")
 
 	v.SetDefault("scheduler.enabled", false)
-	v.SetDefault("scheduler.register_demo_job", false)
 	v.SetDefault("captcha.enabled", false)
 	v.SetDefault("object_storage.enabled", false)
 	v.SetDefault("payment.enabled", false)

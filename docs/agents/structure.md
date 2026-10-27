@@ -20,7 +20,8 @@ app-tpl/
 │   ├── event/                       # 通用事件总线
 │   ├── lock/                        # 分布式锁（Redis / 内存）
 │   ├── objectstorage/               # 对象存储（Aliyun/Tencent/Qiniu）
-│   └── payment/                     # 支付抽象（Alipay/WeChat）
+│   ├── payment/                     # 支付抽象（Alipay/WeChat）
+│   └── scheduler/                   # 定时任务调度核心（cron + 可选 Redis 选主）
 ├── internal/                        # 私有业务代码（外部不可导入）
 │   ├── app/                         # 应用组装与生命周期（手动 DI 唯一入口）
 │   ├── auth/                        # JWT 认证与令牌管理
@@ -49,7 +50,7 @@ app-tpl/
 │   ├── repository/                  # 数据访问层
 │   ├── response/                    # 统一 HTTP 响应结构
 │   ├── router/                      # Gin 路由注册
-│   ├── scheduler/                   # 定时任务（cron + 可选 Redis 选主）
+│   ├── scheduler/                   # 业务定时任务 Job（机制在 pkg/scheduler）
 │   ├── server/                      # HTTP / TCP / UDP 服务器实现
 │   ├── service/                     # 业务逻辑层
 │   ├── tracing/                     # OpenTelemetry 链路追踪

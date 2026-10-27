@@ -123,7 +123,6 @@ metrics:
 # Scheduler (cron) — disabled by default; uses Redis lock when redis.enabled
 scheduler:
   enabled: false
-  register_demo_job: false
 
 # Captcha / object_storage / payment: config skeletons for pkg/*; not auto-wired in App yet
 captcha:
