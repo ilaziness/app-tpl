@@ -48,7 +48,7 @@ func TestRedisLockProvider_AcquireAndRelease(t *testing.T) {
 		t.Error("expected second Acquire to fail")
 	}
 
-	if err := p.Release(ctx); err != nil {
+	if err = p.Release(ctx); err != nil {
 		t.Fatalf("Release: %v", err)
 	}
 
@@ -78,7 +78,7 @@ func TestRedisLockProvider_MutualExclusion(t *testing.T) {
 		t.Error("expected p2 Acquire to fail")
 	}
 
-	if err := p1.Release(ctx); err != nil {
+	if err = p1.Release(ctx); err != nil {
 		t.Fatalf("p1 Release: %v", err)
 	}
 	ok3, err := p2.Acquire(ctx)
