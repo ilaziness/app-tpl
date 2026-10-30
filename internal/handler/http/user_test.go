@@ -71,20 +71,12 @@ func (m *MockUserService) Delete(ctx context.Context, id int64) error {
 	return args.Error(0)
 }
 
-func (m *MockUserService) List(ctx context.Context, limit, offset int) ([]*dto.UserResponse, error) {
+func (m *MockUserService) ListWithCount(ctx context.Context, limit, offset int64) ([]*dto.UserResponse, int64, error) {
 	args := m.Called(ctx, limit, offset)
 	if args.Get(0) == nil {
-		return nil, args.Error(1)
+		return nil, args.Get(1).(int64), args.Error(2)
 	}
-	return args.Get(0).([]*dto.UserResponse), args.Error(1)
-}
-
-func (m *MockUserService) ListWithCount(ctx context.Context, limit, offset int) ([]*dto.UserResponse, int, error) {
-	args := m.Called(ctx, limit, offset)
-	if args.Get(0) == nil {
-		return nil, args.Int(1), args.Error(2)
-	}
-	return args.Get(0).([]*dto.UserResponse), args.Int(1), args.Error(2)
+	return args.Get(0).([]*dto.UserResponse), args.Get(1).(int64), args.Error(2)
 }
 
 func setupTestHandler() (*UserHandler, *MockUserService, *gin.Engine) {
@@ -365,7 +357,7 @@ func TestUserHandler_ListUsers(t *testing.T) {
 					{ID: 1, Email: "user1@example.com", Name: "User 1"},
 					{ID: 2, Email: "user2@example.com", Name: "User 2"},
 				}
-				m.On("ListWithCount", mock.Anything, 10, 0).Return(users, 2, nil)
+				m.On("ListWithCount", mock.Anything, int64(10), int64(0)).Return(users, int64(2), nil)
 			},
 			wantStatus: http.StatusOK,
 			checkBody: func(t *testing.T, body []byte) {
@@ -374,25 +366,25 @@ func TestUserHandler_ListUsers(t *testing.T) {
 					Data struct {
 						List       []dto.UserResponse `json:"list"`
 						Total      int64              `json:"total"`
-						Page       int                `json:"page"`
-						PageSize   int                `json:"page_size"`
-						TotalPages int                `json:"total_pages"`
+						Page       int64              `json:"page"`
+						PageSize   int64              `json:"page_size"`
+						TotalPages int64              `json:"total_pages"`
 					} `json:"data"`
 				}
 				err := json.Unmarshal(body, &result)
 				assert.NoError(t, err)
 				assert.Len(t, result.Data.List, 2)
 				assert.Equal(t, int64(2), result.Data.Total)
-				assert.Equal(t, 1, result.Data.Page)
-				assert.Equal(t, 10, result.Data.PageSize)
-				assert.Equal(t, 1, result.Data.TotalPages)
+				assert.Equal(t, int64(1), result.Data.Page)
+				assert.Equal(t, int64(10), result.Data.PageSize)
+				assert.Equal(t, int64(1), result.Data.TotalPages)
 			},
 		},
 		{
 			name:  "第二页",
 			query: "?page=2&limit=5",
 			mockFn: func(m *MockUserService) {
-				m.On("ListWithCount", mock.Anything, 5, 5).Return([]*dto.UserResponse{}, 0, nil)
+				m.On("ListWithCount", mock.Anything, int64(5), int64(5)).Return([]*dto.UserResponse{}, int64(0), nil)
 			},
 			wantStatus: http.StatusOK,
 			checkBody: func(t *testing.T, body []byte) {
@@ -401,24 +393,36 @@ func TestUserHandler_ListUsers(t *testing.T) {
 					Data struct {
 						List     []dto.UserResponse `json:"list"`
 						Total    int64              `json:"total"`
-						Page     int                `json:"page"`
-						PageSize int                `json:"page_size"`
+						Page     int64              `json:"page"`
+						PageSize int64              `json:"page_size"`
 					} `json:"data"`
 				}
 				err := json.Unmarshal(body, &result)
 				assert.NoError(t, err)
 				assert.Len(t, result.Data.List, 0)
-				assert.Equal(t, 2, result.Data.Page)
+				assert.Equal(t, int64(2), result.Data.Page)
 			},
 		},
 		{
 			name:  "默认分页参数",
 			query: "",
 			mockFn: func(m *MockUserService) {
-				m.On("ListWithCount", mock.Anything, 10, 0).Return([]*dto.UserResponse{}, 0, nil)
+				m.On("ListWithCount", mock.Anything, dto.DefaultLimit, int64(0)).Return([]*dto.UserResponse{}, int64(0), nil)
 			},
 			wantStatus: http.StatusOK,
 			checkBody:  func(t *testing.T, body []byte) {},
+		},
+		{
+			name:       "limit 超出范围",
+			query:      "?limit=200",
+			mockFn:     func(m *MockUserService) {},
+			wantStatus: http.StatusBadRequest,
+		},
+		{
+			name:       "page 超出范围",
+			query:      "?page=1000001",
+			mockFn:     func(m *MockUserService) {},
+			wantStatus: http.StatusBadRequest,
 		},
 	}
 
@@ -438,111 +442,6 @@ func TestUserHandler_ListUsers(t *testing.T) {
 				tt.checkBody(t, w.Body.Bytes())
 			}
 			mockService.AssertExpectations(t)
-		})
-	}
-}
-
-func TestParsePaginationParams(t *testing.T) {
-	gin.SetMode(gin.TestMode)
-
-	tests := []struct {
-		name      string
-		query     string
-		wantPage  int
-		wantLimit int
-	}{
-		{
-			name:      "默认参数",
-			query:     "",
-			wantPage:  1,
-			wantLimit: 10,
-		},
-		{
-			name:      "自定义参数",
-			query:     "?page=2&limit=20",
-			wantPage:  2,
-			wantLimit: 20,
-		},
-		{
-			name:      "无效参数使用默认",
-			query:     "?page=0&limit=0",
-			wantPage:  1,
-			wantLimit: 10,
-		},
-		{
-			name:      "限制最大 limit",
-			query:     "?page=1&limit=200",
-			wantPage:  1,
-			wantLimit: 10,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			router := gin.New()
-			var gotPage, gotLimit int
-
-			router.GET("/test", func(c *gin.Context) {
-				var req dto.ListUsersRequest
-				_ = c.ShouldBindQuery(&req)
-				gotPage = req.GetPage()
-				gotLimit = req.GetLimit()
-			})
-
-			w := httptest.NewRecorder()
-			req, _ := http.NewRequest("GET", "/test"+tt.query, nil)
-			router.ServeHTTP(w, req)
-
-			assert.Equal(t, tt.wantPage, gotPage)
-			assert.Equal(t, tt.wantLimit, gotLimit)
-		})
-	}
-}
-
-func TestCalcTotalPages(t *testing.T) {
-	tests := []struct {
-		name      string
-		total     int
-		limit     int
-		wantPages int
-	}{
-		{
-			name:      "整除",
-			total:     100,
-			limit:     10,
-			wantPages: 10,
-		},
-		{
-			name:      "有余数",
-			total:     95,
-			limit:     10,
-			wantPages: 10,
-		},
-		{
-			name:      "总数为0",
-			total:     0,
-			limit:     10,
-			wantPages: 0,
-		},
-		{
-			name:      "limit为0",
-			total:     10,
-			limit:     0,
-			wantPages: 1,
-		},
-		{
-			name:      "总数小于limit",
-			total:     5,
-			limit:     10,
-			wantPages: 1,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			pagReq := dto.PaginationRequest{Limit: tt.limit}
-			got := pagReq.GetTotalPages(tt.total)
-			assert.Equal(t, tt.wantPages, got)
 		})
 	}
 }

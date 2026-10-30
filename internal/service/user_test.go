@@ -66,7 +66,7 @@ func (m *MockUserRepository) Delete(ctx context.Context, id int64) error {
 	return args.Error(0)
 }
 
-func (m *MockUserRepository) List(ctx context.Context, limit, offset int) ([]*model.User, error) {
+func (m *MockUserRepository) List(ctx context.Context, limit, offset int64) ([]*model.User, error) {
 	args := m.Called(ctx, limit, offset)
 	if args.Get(0) == nil {
 		return nil, args.Error(1)
@@ -74,9 +74,9 @@ func (m *MockUserRepository) List(ctx context.Context, limit, offset int) ([]*mo
 	return args.Get(0).([]*model.User), args.Error(1)
 }
 
-func (m *MockUserRepository) Count(ctx context.Context) (int, error) {
+func (m *MockUserRepository) Count(ctx context.Context) (int64, error) {
 	args := m.Called(ctx)
-	return args.Int(0), args.Error(1)
+	return args.Get(0).(int64), args.Error(1)
 }
 
 func (m *MockUserRepository) RunInTx(ctx context.Context, fn func(ctx context.Context, tx bun.Tx) error) error {
@@ -370,11 +370,11 @@ func TestUserService_Delete_NotFound(t *testing.T) {
 func TestUserService_ListWithCount(t *testing.T) {
 	tests := []struct {
 		name      string
-		limit     int
-		offset    int
+		limit     int64
+		offset    int64
 		mockFn    func(*MockUserRepository)
 		wantUsers int
-		wantTotal int
+		wantTotal int64
 		wantErr   bool
 	}{
 		{
@@ -386,8 +386,8 @@ func TestUserService_ListWithCount(t *testing.T) {
 					{ID: 1, Email: "user1@example.com"},
 					{ID: 2, Email: "user2@example.com"},
 				}
-				m.On("List", mock.Anything, 10, 0).Return(users, nil)
-				m.On("Count", mock.Anything).Return(2, nil)
+				m.On("List", mock.Anything, int64(10), int64(0)).Return(users, nil)
+				m.On("Count", mock.Anything).Return(int64(2), nil)
 			},
 			wantUsers: 2,
 			wantTotal: 2,
@@ -398,8 +398,8 @@ func TestUserService_ListWithCount(t *testing.T) {
 			limit:  10,
 			offset: 100,
 			mockFn: func(m *MockUserRepository) {
-				m.On("List", mock.Anything, 10, 100).Return([]*model.User{}, nil)
-				m.On("Count", mock.Anything).Return(0, nil)
+				m.On("List", mock.Anything, int64(10), int64(100)).Return([]*model.User{}, nil)
+				m.On("Count", mock.Anything).Return(int64(0), nil)
 			},
 			wantUsers: 0,
 			wantTotal: 0,
@@ -432,10 +432,23 @@ func TestUserService_ListWithCount_ListError(t *testing.T) {
 	mockRepo := new(MockUserRepository)
 	service := NewUserService(mockRepo, testCacheManager(t))
 
-	mockRepo.On("List", mock.Anything, 10, 0).Return(nil, fmt.Errorf("database error"))
+	mockRepo.On("List", mock.Anything, int64(10), int64(0)).Return(nil, fmt.Errorf("database error"))
 
 	users, total, err := service.ListWithCount(context.Background(), 10, 0)
 	assert.Error(t, err)
 	assert.Nil(t, users)
-	assert.Equal(t, 0, total)
+	assert.Equal(t, int64(0), total)
+}
+
+func TestUserService_ListWithCount_CountError(t *testing.T) {
+	mockRepo := new(MockUserRepository)
+	service := NewUserService(mockRepo, testCacheManager(t))
+
+	mockRepo.On("List", mock.Anything, int64(10), int64(0)).Return([]*model.User{}, nil)
+	mockRepo.On("Count", mock.Anything).Return(int64(0), fmt.Errorf("database error"))
+
+	users, total, err := service.ListWithCount(context.Background(), 10, 0)
+	assert.Error(t, err)
+	assert.Nil(t, users)
+	assert.Equal(t, int64(0), total)
 }

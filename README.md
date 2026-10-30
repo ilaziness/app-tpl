@@ -23,7 +23,7 @@ A flexible Go application template framework that supports multiple service type
 
 ### Prerequisites
 
-- Go 1.26.4 or higher
+- Go 1.27.3 or higher
 
 ### Installation
 

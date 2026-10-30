@@ -152,5 +152,5 @@ func (h *UserHandler) ListUsers(c *gin.Context) {
 		return
 	}
 
-	response.SuccessPage(c, users, int64(total), page, limit, req.GetTotalPages(total))
+	response.SuccessPage(c, users, total, page, limit, req.GetTotalPages(total))
 }

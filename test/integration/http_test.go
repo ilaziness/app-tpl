@@ -70,20 +70,12 @@ func (m *MockUserService) Delete(ctx context.Context, id int64) error {
 	return args.Error(0)
 }
 
-func (m *MockUserService) List(ctx context.Context, limit, offset int) ([]*dto.UserResponse, error) {
+func (m *MockUserService) ListWithCount(ctx context.Context, limit, offset int64) ([]*dto.UserResponse, int64, error) {
 	args := m.Called(ctx, limit, offset)
 	if args.Get(0) == nil {
-		return nil, args.Error(1)
+		return nil, args.Get(1).(int64), args.Error(2)
 	}
-	return args.Get(0).([]*dto.UserResponse), args.Error(1)
-}
-
-func (m *MockUserService) ListWithCount(ctx context.Context, limit, offset int) ([]*dto.UserResponse, int, error) {
-	args := m.Called(ctx, limit, offset)
-	if args.Get(0) == nil {
-		return nil, 0, args.Error(2)
-	}
-	return args.Get(0).([]*dto.UserResponse), args.Int(1), args.Error(2)
+	return args.Get(0).([]*dto.UserResponse), args.Get(1).(int64), args.Error(2)
 }
 
 func (m *MockUserService) ValidateCredentials(ctx context.Context, email, password string) (*model.User, error) {
@@ -301,7 +293,7 @@ func TestUserCRUD(t *testing.T) {
 			{ID: 1, Email: "user1@example.com", Name: "User 1"},
 			{ID: 2, Email: "user2@example.com", Name: "User 2"},
 		}
-		mockService.On("ListWithCount", mock.Anything, 10, 0).Return(users, 2, nil).Once()
+		mockService.On("ListWithCount", mock.Anything, int64(10), int64(0)).Return(users, int64(2), nil).Once()
 
 		resp, err := http.Get(server.URL + "/api/client/v1/users?page=1&limit=10")
 		assert.NoError(t, err)

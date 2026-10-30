@@ -23,8 +23,7 @@ type UserService interface {
 	ValidateCredentials(ctx context.Context, email, password string) (*model.User, error)
 	Update(ctx context.Context, id int64, req *dto.UpdateUserRequest) (*dto.UserResponse, error)
 	Delete(ctx context.Context, id int64) error
-	List(ctx context.Context, limit, offset int) ([]*dto.UserResponse, error)
-	ListWithCount(ctx context.Context, limit, offset int) ([]*dto.UserResponse, int, error)
+	ListWithCount(ctx context.Context, limit, offset int64) ([]*dto.UserResponse, int64, error)
 }
 
 // userService handles user business logic.
@@ -175,17 +174,8 @@ func (s *userService) invalidateUserCache(ctx context.Context, id int64, email s
 	}
 }
 
-// List retrieves a list of users with pagination.
-func (s *userService) List(ctx context.Context, limit, offset int) ([]*dto.UserResponse, error) {
-	users, err := s.userRepo.List(ctx, limit, offset)
-	if err != nil {
-		return nil, fmt.Errorf("failed to list users: %w", err)
-	}
-	return toUserResponses(users), nil
-}
-
 // ListWithCount retrieves a list of users with pagination and returns total count.
-func (s *userService) ListWithCount(ctx context.Context, limit, offset int) ([]*dto.UserResponse, int, error) {
+func (s *userService) ListWithCount(ctx context.Context, limit, offset int64) ([]*dto.UserResponse, int64, error) {
 	users, err := s.userRepo.List(ctx, limit, offset)
 	if err != nil {
 		return nil, 0, fmt.Errorf("failed to list users: %w", err)

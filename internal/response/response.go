@@ -21,9 +21,9 @@ type Response struct {
 type PageData struct {
 	List       any   `json:"list"`
 	Total      int64 `json:"total"`
-	Page       int   `json:"page"`
-	PageSize   int   `json:"page_size"`
-	TotalPages int   `json:"total_pages"`
+	Page       int64 `json:"page"`
+	PageSize   int64 `json:"page_size"`
+	TotalPages int64 `json:"total_pages"`
 }
 
 // includeCause controls whether Error responses expose Cause (dev debugging).
@@ -58,7 +58,7 @@ func SuccessWithMessage(c *gin.Context, message string, data any) {
 }
 
 // SuccessPage sends a successful paginated response.
-func SuccessPage(c *gin.Context, list any, total int64, page, pageSize, totalPages int) {
+func SuccessPage(c *gin.Context, list any, total, page, pageSize, totalPages int64) {
 	c.JSON(http.StatusOK, Response{
 		Code:    0,
 		Message: "success",

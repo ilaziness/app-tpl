@@ -25,8 +25,8 @@ type UserRepository interface {
 	GetByEmail(ctx context.Context, email string) (*model.User, error)
 	Update(ctx context.Context, user *model.User) error
 	Delete(ctx context.Context, id int64) error
-	List(ctx context.Context, limit, offset int) ([]*model.User, error)
-	Count(ctx context.Context) (int, error)
+	List(ctx context.Context, limit, offset int64) ([]*model.User, error)
+	Count(ctx context.Context) (int64, error)
 	RunInTx(ctx context.Context, fn func(ctx context.Context, tx bun.Tx) error) error
 	WithTx(db bun.IDB) UserRepository
 }
@@ -114,7 +114,7 @@ func (r *UserRepo) Delete(ctx context.Context, id int64) error {
 }
 
 // List retrieves a list of users with pagination.
-func (r *UserRepo) List(ctx context.Context, limit, offset int) ([]*model.User, error) {
+func (r *UserRepo) List(ctx context.Context, limit, offset int64) ([]*model.User, error) {
 	var users []*model.User
 	err := r.db.NewSelect().Model(&users).
 		Where(userNotDeletedCond).
@@ -129,7 +129,7 @@ func (r *UserRepo) List(ctx context.Context, limit, offset int) ([]*model.User, 
 }
 
 // Count returns the total count of users.
-func (r *UserRepo) Count(ctx context.Context) (int, error) {
+func (r *UserRepo) Count(ctx context.Context) (int64, error) {
 	count, err := r.db.NewSelect().Model((*model.User)(nil)).
 		Where(userNotDeletedCond).
 		Count(ctx)

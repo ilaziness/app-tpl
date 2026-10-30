@@ -257,8 +257,8 @@ func TestUserRepository_List(t *testing.T) {
 
 	tests := []struct {
 		name     string
-		limit    int
-		offset   int
+		limit    int64
+		offset   int64
 		expected int
 	}{
 		{
@@ -309,7 +309,7 @@ func TestUserRepository_Count(t *testing.T) {
 
 	count, err := repo.Count(ctx)
 	assert.NoError(t, err)
-	assert.Equal(t, 3, count)
+	assert.Equal(t, int64(3), count)
 }
 
 // 并发创建用户测试
@@ -345,5 +345,5 @@ func TestUserRepository_ConcurrentCreate(t *testing.T) {
 	// 验证创建的用户数量
 	count, err := repo.Count(ctx)
 	assert.NoError(t, err)
-	assert.Equal(t, concurrency, count)
+	assert.Equal(t, int64(concurrency), count)
 }

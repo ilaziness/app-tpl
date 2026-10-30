@@ -1,6 +1,6 @@
 # 多阶段构建 Dockerfile
 # 阶段 1: 构建阶段
-FROM golang:1.26.4-alpine AS builder
+FROM golang:1.27.3-alpine AS builder
 
 # 安装必要的工具
 RUN apk add --no-cache git make ca-certificates
