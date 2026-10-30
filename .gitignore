@@ -47,4 +47,6 @@ temp/
 
 # Config files with secrets
 configs/config.local.yaml
-configs/.env.local
+configs/.env
+configs/.env.*
+!configs/.env.example

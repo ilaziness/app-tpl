@@ -36,6 +36,6 @@ func Execute() {
 }
 
 func init() {
-	rootCmd.PersistentFlags().StringVarP(&cfgFile, "config", "c", "", "config file (default is ./configs/config.yaml)")
-	rootCmd.PersistentFlags().StringVarP(&env, "env", "e", "", "environment (dev/prod/test), overrides app.env in config")
+	rootCmd.PersistentFlags().StringVarP(&cfgFile, "config", "c", "", "primary config file (default ./configs/config.yaml)")
+	rootCmd.PersistentFlags().StringVarP(&env, "env", "e", "", "environment overlay (dev/prod/test); also set via APP_ENV; locks app.env when set")
 }

@@ -45,8 +45,7 @@ func (c *Config) validateEnums() error {
 	if err := validateOneOfFold("log.output", c.Log.Output, constant.LogOutputStdout, constant.LogOutputFile, constant.LogOutputBoth); err != nil {
 		return err
 	}
-	if c.Log.Output == constant.LogOutputFile || c.Log.Output == constant.LogOutputBoth ||
-		strings.EqualFold(c.Log.Output, constant.LogOutputFile) || strings.EqualFold(c.Log.Output, constant.LogOutputBoth) {
+	if strings.EqualFold(c.Log.Output, constant.LogOutputFile) || strings.EqualFold(c.Log.Output, constant.LogOutputBoth) {
 		if c.Log.Filename == "" {
 			return fmt.Errorf("log.filename is required when log.output is file or both")
 		}

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/ilaziness/app-tpl/internal/constant"
@@ -14,13 +15,39 @@ import (
 
 // Environment variable names
 const (
-	EnvVarAppEnv           = "APP_ENV"
-	EnvVarDatabasePassword = "DATABASE_PASSWORD"
-	EnvVarRedisPassword    = "REDIS_PASSWORD"
+	EnvVarAppEnv                 = "APP_ENV"
+	EnvVarDatabasePassword       = "DATABASE_PASSWORD"
+	EnvVarRedisPassword          = "REDIS_PASSWORD"
+	EnvVarJWTSecret              = "JWT_SECRET"
+	EnvVarHTTPInternalServiceKey = "HTTP_INTERNAL_SERVICE_KEY"
+	EnvVarObjectStorageAccessKey = "OBJECT_STORAGE_ACCESS_KEY"
+	EnvVarObjectStorageSecretKey = "OBJECT_STORAGE_SECRET_KEY"
 )
 
-// Global config instance
-var Cfg *Config
+// SensitiveBind maps a config key to the environment variable that overrides it.
+type SensitiveBind struct {
+	Key    string // Viper / mapstructure dotted key, e.g. "database.password"
+	EnvVar string
+}
+
+// SensitiveBinds is the single source of truth for secret env bindings
+// and .env.example completeness checks. Keep MaskedCopy in sync with these keys.
+var SensitiveBinds = []SensitiveBind{
+	{Key: "database.password", EnvVar: EnvVarDatabasePassword},
+	{Key: "redis.password", EnvVar: EnvVarRedisPassword},
+	{Key: "jwt.secret", EnvVar: EnvVarJWTSecret},
+	{Key: "http.internal_service_key", EnvVar: EnvVarHTTPInternalServiceKey},
+	{Key: "object_storage.access_key", EnvVar: EnvVarObjectStorageAccessKey},
+	{Key: "object_storage.secret_key", EnvVar: EnvVarObjectStorageSecretKey},
+}
+
+// LoadMeta describes which files contributed to a successful config load.
+type LoadMeta struct {
+	BasePath    string   // Absolute or resolved path of the primary config file (may be empty if defaults-only)
+	OverlayPath string   // Merged overlay path, empty if none
+	OverlayEnv  string   // Set only when overlay merge was attempted (--env / APP_ENV and base is config.yaml)
+	DotenvPaths []string // Dotenv files that were successfully loaded
+}
 
 // Config 应用根配置，对应 configs/config.yaml 及各模块段落。
 type Config struct {
@@ -237,61 +264,53 @@ type MetricsConfig struct {
 	Labels  map[string]string `mapstructure:"labels"`  // 附加到所有指标的全局标签
 }
 
+// LoadWithEnv loads configuration using the layered rules documented in LoadWithMeta.
 func LoadWithEnv(configPath, envOverride string) (*Config, error) {
-	v := viper.New()
+	cfg, _, err := LoadWithMeta(configPath, envOverride)
+	return cfg, err
+}
 
+// LoadWithMeta loads configuration and returns metadata about which files contributed.
+//
+// Overlay selection (overlayEnv): --env (envOverride) > APP_ENV > empty (no overlay).
+// Overlay is merged only when overlayEnv is non-empty AND the primary file is named
+// config.yaml (escape hatch: -c other.yaml is always single-file).
+//
+// Final app.env: overlayEnv if set; else YAML value; else "dev".
+func LoadWithMeta(configPath, envOverride string) (*Config, LoadMeta, error) {
+	meta := LoadMeta{}
+	v := viper.New()
 	setDefaults(v)
 
-	// Step 1: Determine environment from envOverride > system env > default
-	env := envOverride
-	if env == "" {
-		env = os.Getenv(EnvVarAppEnv)
-		if env == "" {
-			env = constant.EnvDev // default to dev
-		}
+	// Explicit env selector only — empty means do not merge overlay.
+	overlayEnv := envOverride
+	if overlayEnv == "" {
+		overlayEnv = os.Getenv(EnvVarAppEnv)
 	}
-	v.Set("app.env", env)
 
-	// Step 2: Load .env files based on environment (optional, won't fail if missing)
-	loadOptionalDotenv(fmt.Sprintf(".env.%s", env))
-	loadOptionalDotenv(fmt.Sprintf("./configs/.env.%s", env))
-	loadOptionalDotenv(".env")
-	loadOptionalDotenv("./configs/.env")
+	// Dotenv fills unset process env vars (first loaded wins among dotenv files).
+	meta.DotenvPaths = loadDotenvFiles(overlayEnv)
 
-	// Step 3: Bind sensitive fields to environment variables
-	bindEnvVar(v, "database.password", EnvVarDatabasePassword)
-	bindEnvVar(v, "redis.password", EnvVarRedisPassword)
+	if err := bindSensitiveEnvs(v); err != nil {
+		return nil, meta, err
+	}
 
 	configDir := "./configs"
+	baseIsConfigYAML := false
 
-	// Step 4: Load config files
-	// Priority 1: If configPath is provided, load it directly
 	if configPath != "" {
 		absPath, err := filepath.Abs(configPath)
 		if err != nil {
-			return nil, fmt.Errorf("failed to get absolute path: %w", err)
+			return nil, meta, fmt.Errorf("failed to get absolute path: %w", err)
 		}
 		configDir = filepath.Dir(absPath)
 		v.SetConfigFile(configPath)
 		if err := v.ReadInConfig(); err != nil {
-			return nil, fmt.Errorf("failed to read config file: %w", err)
+			return nil, meta, fmt.Errorf("failed to read config file: %w", err)
 		}
-
-		// If envOverride is provided, merge env config (for backward compat with --env + --config)
-		if envOverride != "" {
-			envConfigName := fmt.Sprintf("config.%s", envOverride)
-			envConfigFile := filepath.Join(configDir, envConfigName+".yaml")
-			if _, err := os.Stat(envConfigFile); err == nil {
-				v.SetConfigName(envConfigName)
-				v.SetConfigType("yaml")
-				v.AddConfigPath(configDir)
-				if err := v.MergeInConfig(); err != nil {
-					return nil, fmt.Errorf("failed to merge environment config: %w", err)
-				}
-			}
-		}
+		meta.BasePath = absPath
+		baseIsConfigYAML = strings.EqualFold(filepath.Base(absPath), "config.yaml")
 	} else {
-		// Priority 2: Load base config.yaml
 		v.SetConfigName("config")
 		v.SetConfigType("yaml")
 		v.AddConfigPath(configDir)
@@ -300,30 +319,49 @@ func LoadWithEnv(configPath, envOverride string) (*Config, error) {
 		if err := v.ReadInConfig(); err != nil {
 			var notFound viper.ConfigFileNotFoundError
 			if !errors.As(err, &notFound) {
-				return nil, fmt.Errorf("failed to read config file: %w", err)
+				return nil, meta, fmt.Errorf("failed to read config file: %w", err)
 			}
+		} else {
+			used := v.ConfigFileUsed()
+			meta.BasePath = used
+			configDir = filepath.Dir(used)
+			baseIsConfigYAML = strings.EqualFold(filepath.Base(used), "config.yaml")
 		}
+	}
 
-		// Merge environment-specific config
-		envConfigName := fmt.Sprintf("config.%s", env)
-		envConfigFile := filepath.Join(configDir, envConfigName+".yaml")
-		if _, err := os.Stat(envConfigFile); err == nil { //nolint:gosec // envConfigFile is derived from trusted config dir + env name
-			v.SetConfigName(envConfigName)
+	if overlayEnv != "" && baseIsConfigYAML {
+		meta.OverlayEnv = overlayEnv
+		overlayName := "config." + overlayEnv
+		overlayFile := filepath.Join(configDir, overlayName+".yaml")
+		if _, err := os.Stat(overlayFile); err == nil { //nolint:gosec // path from trusted config dir + env name
+			v.SetConfigName(overlayName)
 			v.SetConfigType("yaml")
 			v.AddConfigPath(configDir)
 			if err := v.MergeInConfig(); err != nil {
-				return nil, fmt.Errorf("failed to merge environment config: %w", err)
+				return nil, meta, fmt.Errorf("failed to merge environment config: %w", err)
 			}
+			abs, absErr := filepath.Abs(overlayFile)
+			if absErr != nil {
+				abs = overlayFile
+			}
+			meta.OverlayPath = abs
 		}
 	}
 
 	cfg := &Config{}
 	if err := v.Unmarshal(cfg); err != nil {
-		return nil, fmt.Errorf("failed to unmarshal config: %w", err)
+		return nil, meta, fmt.Errorf("failed to unmarshal config: %w", err)
 	}
-	Cfg = cfg
 
-	return cfg, nil
+	// Resolve app.env after YAML merge so CLI/APP_ENV win when explicitly set.
+	switch {
+	case overlayEnv != "":
+		cfg.App.Env = overlayEnv
+	case cfg.App.Env == "":
+		cfg.App.Env = constant.EnvDev
+	}
+
+	return cfg, meta, nil
 }
 
 func (c *Config) Validate() error {
@@ -333,8 +371,10 @@ func (c *Config) Validate() error {
 	if err := c.validateEnums(); err != nil {
 		return err
 	}
-	if c.HTTP.Port < 1 || c.HTTP.Port > 65535 {
-		return fmt.Errorf("http.port must be between 1 and 65535")
+	if c.HTTP.Enabled {
+		if c.HTTP.Port < 1 || c.HTTP.Port > 65535 {
+			return fmt.Errorf("http.port must be between 1 and 65535")
+		}
 	}
 	if c.Database.Driver == "" {
 		return fmt.Errorf("database.driver is required")
@@ -351,10 +391,8 @@ func (c *Config) Validate() error {
 		}
 	}
 
-	if c.JWT.Secret != "" {
-		if len(c.JWT.Secret) < 32 {
-			return fmt.Errorf("jwt.secret must be at least 32 bytes for HS256")
-		}
+	if c.JWT.Secret != "" && len(c.JWT.Secret) < 32 {
+		return fmt.Errorf("jwt.secret must be at least 32 bytes for HS256")
 	}
 	// Production environment requires JWT secret
 	if c.App.Env == constant.EnvProd && c.JWT.Secret == "" {
@@ -444,24 +482,6 @@ func (c *Config) Validate() error {
 	return nil
 }
 
-func (c *Config) MaskedPassword() string {
-	return "******"
-}
-
-func (c *Config) MaskedDatabasePassword() string {
-	if c.Database.Password == "" {
-		return ""
-	}
-	return "******"
-}
-
-func (c *Config) MaskedRedisPassword() string {
-	if c.Redis.Password == "" {
-		return ""
-	}
-	return "******"
-}
-
 func setDefaults(v *viper.Viper) {
 	v.SetDefault("app.name", constant.AppName)
 	v.SetDefault("app.version", "1.0.0")
@@ -492,7 +512,10 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("redis.enabled", false)
 	v.SetDefault("redis.host", "localhost")
 	v.SetDefault("redis.port", 6379)
+	v.SetDefault("redis.db", 0)
 	v.SetDefault("redis.pool_size", 10)
+	v.SetDefault("redis.min_idle_conns", 0)
+	v.SetDefault("redis.idle_timeout", 300)
 
 	v.SetDefault("cache.enabled", false)
 	v.SetDefault("cache.driver", "memory")
@@ -526,6 +549,7 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("tcp.shutdown_timeout", 30)
 	v.SetDefault("tcp.codec", "json")
 	v.SetDefault("tcp.max_connections", 10000)
+	v.SetDefault("tcp.max_timeout_count", 10)
 
 	v.SetDefault("udp.enabled", false)
 	v.SetDefault("udp.host", "0.0.0.0")
@@ -535,6 +559,8 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("udp.shutdown_timeout", 30)
 	v.SetDefault("udp.codec", "json")
 	v.SetDefault("udp.worker_pool_size", 100)
+	v.SetDefault("udp.session_cleanup_interval", 300)
+	v.SetDefault("udp.session_inactive_threshold", 600)
 
 	v.SetDefault("tracing.enabled", false)
 	v.SetDefault("tracing.sample_rate", 1.0)
@@ -548,14 +574,98 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("payment.enabled", false)
 }
 
-func loadOptionalDotenv(path string) {
-	if err := godotenv.Load(path); err != nil {
-		return // dotenv files are optional
+func loadDotenvFiles(overlayEnv string) []string {
+	candidates := make([]string, 0, 4)
+	if overlayEnv != "" {
+		candidates = append(candidates,
+			fmt.Sprintf(".env.%s", overlayEnv),
+			fmt.Sprintf("./configs/.env.%s", overlayEnv),
+		)
 	}
+	candidates = append(candidates, ".env", "./configs/.env")
+
+	loaded := make([]string, 0, len(candidates))
+	for _, path := range candidates {
+		if err := godotenv.Load(path); err != nil {
+			continue // dotenv files are optional
+		}
+		loaded = append(loaded, path)
+	}
+	return loaded
 }
 
-func bindEnvVar(v *viper.Viper, key, envKey string) {
-	if err := v.BindEnv(key, envKey); err != nil {
-		return // bind failures are non-fatal during setup
+func bindSensitiveEnvs(v *viper.Viper) error {
+	for _, b := range SensitiveBinds {
+		if err := v.BindEnv(b.Key, b.EnvVar); err != nil {
+			return fmt.Errorf("failed to bind env %s -> %s: %w", b.EnvVar, b.Key, err)
+		}
 	}
+	return nil
+}
+
+// MaskedCopy returns a copy with sensitive string fields replaced by ******.
+// Empty secrets stay empty so operators can see what is unset.
+func (c *Config) MaskedCopy() *Config {
+	cp := *c
+	if cp.Database.Password != "" {
+		cp.Database.Password = "******"
+	}
+	if cp.Redis.Password != "" {
+		cp.Redis.Password = "******"
+	}
+	if cp.JWT.Secret != "" {
+		cp.JWT.Secret = "******"
+	}
+	if cp.HTTP.InternalServiceKey != "" {
+		cp.HTTP.InternalServiceKey = "******"
+	}
+	if cp.ObjectStorage.AccessKey != "" {
+		cp.ObjectStorage.AccessKey = "******"
+	}
+	if cp.ObjectStorage.SecretKey != "" {
+		cp.ObjectStorage.SecretKey = "******"
+	}
+	return &cp
+}
+
+// EnabledModules lists top-level modules that are currently enabled.
+func (c *Config) EnabledModules() []string {
+	mods := make([]string, 0, 12)
+	if c.HTTP.Enabled {
+		mods = append(mods, "http")
+	}
+	if c.TCP.Enabled {
+		mods = append(mods, "tcp")
+	}
+	if c.UDP.Enabled {
+		mods = append(mods, "udp")
+	}
+	if c.Redis.Enabled {
+		mods = append(mods, "redis")
+	}
+	if c.Cache.Enabled {
+		mods = append(mods, "cache")
+	}
+	if c.RateLimit.Enabled {
+		mods = append(mods, "rate_limit")
+	}
+	if c.Tracing.Enabled {
+		mods = append(mods, "tracing")
+	}
+	if c.Metrics.Enabled {
+		mods = append(mods, "metrics")
+	}
+	if c.Scheduler.Enabled {
+		mods = append(mods, "scheduler")
+	}
+	if c.Captcha.Enabled {
+		mods = append(mods, "captcha")
+	}
+	if c.ObjectStorage.Enabled {
+		mods = append(mods, "object_storage")
+	}
+	if c.Payment.Enabled {
+		mods = append(mods, "payment")
+	}
+	return mods
 }

@@ -1,142 +1,166 @@
-# Application configuration
+# =============================================================================
+# Application configuration catalog (base)
+# -----------------------------------------------------------------------------
+# This file lists ALL configurable keys with comments (meaning / defaults / enums).
+# Environment overlays (config.dev.yaml / config.prod.yaml / config.test.yaml)
+# only override values that differ per environment — never put secrets here.
+#
+# Load order (high wins over low):
+#   1. --env / APP_ENV (selects overlay; also locks app.env when set)
+#   2. Process env vars for sensitive fields only (see configs/.env.example)
+#   3. Optional dotenv files (fill unset secrets only)
+#   4. config.{env}.yaml overlay (only when --env or APP_ENV is set AND base is config.yaml)
+#   5. This file (config.yaml)
+#   6. Built-in code defaults
+#
+# Secrets: leave empty and set via environment variables / .env — never commit real values.
+# =============================================================================
+
+# Application identity
 app:
-  name: app-tpl
-  version: 1.0.0
-  env: dev
+  name: app-tpl                # required; application name
+  version: 1.0.0               # application version string
+  env: dev                     # default runtime env when --env / APP_ENV unset; enum: dev | prod | test
 
-# HTTP server configuration
+# HTTP server
 http:
-  enabled: true
-  host: 0.0.0.0
-  port: 8080
-  read_timeout: 30
-  write_timeout: 30
-  shutdown_timeout: 30
-  # internal_service_key: set via HTTP_INTERNAL_SERVICE_KEY in production
+  enabled: true                # whether to start the HTTP server
+  host: 0.0.0.0                # listen address
+  port: 8080                   # listen port; range 1-65535
+  read_timeout: 30             # read timeout in seconds
+  write_timeout: 30            # write timeout in seconds
+  shutdown_timeout: 30         # graceful shutdown timeout in seconds (default 30)
+  # internal_service_key: ""   # internal API key; override via HTTP_INTERNAL_SERVICE_KEY
   tls:
-    enabled: false
-    cert_file: configs/cert.pem
-    key_file: configs/key.pem
-    min_version: "1.3"
+    enabled: false             # enable HTTPS
+    cert_file: configs/cert.pem  # certificate path (required when enabled)
+    key_file: configs/key.pem    # private key path (required when enabled)
+    min_version: "1.3"         # minimum TLS version when non-empty; enum: 1.2 | 1.3
 
-# Logging configuration
+# Logging
 log:
-  level: debug
-  format: console
-  output: stdout
-  filename: logs/app.log
-  max_size: 100
-  max_backups: 30
-  max_age: 7
-  compress: true
+  level: debug                 # enum (case-insensitive): debug | info | warn | error
+  format: console              # enum (case-insensitive): json | console
+  output: stdout               # enum (case-insensitive): stdout | file | both
+  filename: logs/app.log       # log file path (required when output is file/both)
+  max_size: 100                # max size per file in MB
+  max_backups: 30              # number of rotated files to keep
+  max_age: 7                   # days to retain rotated files
+  compress: true               # compress rotated files
 
-# Database configuration (required, SQLite example)
+# Database (required). Default: SQLite for zero-dependency local runs.
 database:
-  driver: sqlite
-  database: ./data/app.db
-  max_open_conns: 25
-  max_idle_conns: 10
-  conn_max_lifetime: 300
-  conn_max_idle_time: 60
+  driver: sqlite               # required; enum: sqlite | sqlite3 | mysql | postgres | postgresql
+  # host: localhost            # required for non-SQLite
+  # port: 3306                 # used for non-SQLite
+  # user: app                  # used for non-SQLite
+  # password: ""               # set via DATABASE_PASSWORD; do not commit secrets
+  database: ./data/app.db      # required; SQLite file path or DB name
+  # ssl_mode: ""               # PostgreSQL only when set; enum: disable | require | verify-ca | verify-full
+  max_open_conns: 25           # max open connections
+  max_idle_conns: 10           # max idle connections
+  conn_max_lifetime: 300       # connection max lifetime in seconds
+  conn_max_idle_time: 60       # connection max idle time in seconds
 
-# Redis configuration (disabled by default)
+# Redis (optional)
 redis:
-  enabled: false
-  host: localhost
-  port: 6379
-  password: ""
-  db: 0
-  pool_size: 50
-  min_idle_conns: 5
-  idle_timeout: 300
+  enabled: false               # enable Redis client
+  host: localhost              # required when enabled
+  port: 6379                   # Redis port
+  # password: ""               # set via REDIS_PASSWORD
+  db: 0                        # logical DB index (typically 0-15)
+  pool_size: 50                # connection pool size
+  min_idle_conns: 5            # minimum idle connections
+  idle_timeout: 300            # idle connection timeout in seconds
 
-# JWT configuration
-# jwt.secret should be set via JWT_SECRET environment variable in production
-# Defaults always merge health/swagger/client/internal skips via MergeJWTSkipPaths
+# JWT authentication
+# secret: set via JWT_SECRET (required in production; min 32 bytes for HS256)
 jwt:
-  access_token_ttl: 7200   # 2 hours in seconds
-  refresh_token_ttl: 604800 # 7 days in seconds
+  # secret: ""
+  access_token_ttl: 7200       # access token TTL in seconds (default 7200 = 2h)
+  refresh_token_ttl: 604800    # refresh token TTL in seconds (default 604800 = 7d)
+  # Extra skip path prefixes; system/client/internal defaults always merged via MergeJWTSkipPaths.
+  # Note: Viper replaces arrays wholesale on overlay merge — avoid empty skip_paths in overlays unless intentional.
   skip_paths: []
 
-# Rate limiting configuration (disabled by default)
+# Rate limiting (optional)
 rate_limit:
   enabled: false
-  store: memory  # memory or redis
-  global_rps: 10000
-  ip_rps: 100
-  user_rps: 50
+  store: memory                # when enabled; enum: memory | redis (redis requires redis.enabled)
+  global_rps: 10000            # global requests/sec; 0 = unlimited
+  ip_rps: 100                  # per-IP requests/sec; 0 = unlimited
+  user_rps: 50                 # per-user requests/sec; 0 = unlimited
 
-# Cache configuration (disabled by default)
+# Cache (optional)
 cache:
   enabled: false
-  driver: memory  # memory, redis, multi
+  driver: memory               # when enabled; enum: memory | redis | multi
   memory:
-    num_counters: 1000000
-    max_cost: 100000  # max cached items (cost=1 per item)
-    buffer_items: 64
+    num_counters: 1000000      # Ristretto counters; ~10x expected key count
+    max_cost: 100000           # max cached items (cost=1 per item)
+    buffer_items: 64           # write buffer size
   redis:
-    key_prefix: "app:"
-    default_ttl: 3600 # 1 hour in seconds
+    key_prefix: "app:"         # key prefix
+    default_ttl: 3600          # default TTL in seconds
 
-# TCP server configuration (disabled by default)
+# TCP server (optional)
 tcp:
   enabled: false
   host: 0.0.0.0
-  port: 9000
-  read_timeout: 30
-  write_timeout: 30
-  heartbeat_interval: 30
-  heartbeat_timeout: 90
-  shutdown_timeout: 30
-  codec: json  # json or binary
-  max_connections: 10000
-  max_timeout_count: 10  # consecutive timeouts before closing connection
+  port: 9000                   # range 1-65535 when enabled
+  read_timeout: 30             # seconds
+  write_timeout: 30            # seconds
+  heartbeat_interval: 30       # seconds
+  heartbeat_timeout: 90        # seconds
+  shutdown_timeout: 30         # seconds
+  codec: json                  # when enabled; enum: json | binary
+  max_connections: 10000       # must be > 0 when enabled
+  max_timeout_count: 10        # consecutive timeouts before disconnect
 
-# UDP server configuration (disabled by default)
+# UDP server (optional)
 udp:
   enabled: false
   host: 0.0.0.0
-  port: 9001
-  read_buffer_size: 4096
-  write_buffer_size: 4096
-  shutdown_timeout: 30
-  codec: json  # json or binary
-  worker_pool_size: 100
-  session_cleanup_interval: 300  # seconds (5 minutes)
-  session_inactive_threshold: 600  # seconds (10 minutes)
+  port: 9001                   # range 1-65535 when enabled
+  read_buffer_size: 4096       # bytes
+  write_buffer_size: 4096      # bytes
+  shutdown_timeout: 30         # seconds
+  codec: json                  # when enabled; enum: json | binary
+  worker_pool_size: 100        # must be > 0 when enabled
+  session_cleanup_interval: 300    # seconds
+  session_inactive_threshold: 600  # seconds
 
-# Tracing configuration (disabled by default)
-# Uses OTLP protocol (Jaeger, Tempo, and other backends support OTLP)
+# Distributed tracing via OTLP (optional; Jaeger / Tempo / etc.)
 tracing:
   enabled: false
-  endpoint: localhost:4317  # OTLP gRPC endpoint (e.g., Jaeger collector at localhost:4317)
-  sample_rate: 1.0  # 采样率，1.0 表示全采样
+  endpoint: localhost:4317     # OTLP gRPC endpoint (required when enabled)
+  sample_rate: 1.0             # range 0.0-1.0
 
-# Metrics configuration (disabled by default)
+# Prometheus metrics (optional)
 metrics:
   enabled: false
-  path: /metrics
+  path: /metrics               # must start with / when enabled
   labels:
     env: dev
     version: "1.0.0"
 
-# Scheduler (cron) — disabled by default; uses Redis lock when redis.enabled
+# Scheduler / captcha / object_storage / payment: pkg skeletons; not auto-wired unless enabled in App
 scheduler:
   enabled: false
 
-# Captcha / object_storage / payment: config skeletons for pkg/*; not auto-wired in App yet
 captcha:
   enabled: false
 
 object_storage:
   enabled: false
-  provider: "" # aliyun | tencent | qiniu
+  provider: ""                 # aliyun | tencent | qiniu
   bucket: ""
   region: ""
-  endpoint: ""
-  access_key: ""
-  secret_key: ""
-  cdn_domain: ""
+  endpoint: ""                 # optional custom API endpoint
+  # access_key / secret_key: set via OBJECT_STORAGE_ACCESS_KEY / OBJECT_STORAGE_SECRET_KEY
+  # access_key: ""
+  # secret_key: ""
+  cdn_domain: ""               # CDN domain for PublicURL
 
 payment:
   enabled: false

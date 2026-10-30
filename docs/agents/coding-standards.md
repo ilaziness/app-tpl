@@ -17,15 +17,26 @@
 
 ## 配置管理
 
-加载逻辑见 `internal/config/config.go` 的 `LoadWithEnv`：
+加载逻辑见 `internal/config/config.go` 的 `LoadWithMeta` / `LoadWithEnv`。
 
-1. **环境判定**：`-e/--env` > 环境变量 `APP_ENV` > 默认 `dev`
-2. **dotenv**：按环境加载 `.env.{env}`、`configs/.env.{env}`、`.env`、`configs/.env`（文件缺失不报错；`godotenv.Load` 不覆盖已有变量，先加载优先）
-3. **主配置**：指定 `-c/--config` 时加载该文件；未指定时加载 `configs/config.yaml`
-4. **环境覆盖**：合并 `configs/config.{env}.yaml`（存在则 merge）
-5. **敏感字段**：`DATABASE_PASSWORD`、`REDIS_PASSWORD` 通过 Viper 绑定环境变量覆盖
+**覆盖优先级（高覆盖低）**：
 
-支持的环境名：`dev`、`prod`、`test`。
+1. **环境选择符** `overlayEnv`：`-e/--env` > `APP_ENV` > 空（不 merge overlay）
+2. **进程环境变量**：仅敏感项（见 `config.SensitiveBinds` / `configs/.env.example`）
+3. **dotenv**（可选）：`.env.{env}` → `configs/.env.{env}` → `.env` → `configs/.env`（不覆盖已有进程环境；dotenv 之间先加载优先）
+4. **`config.{env}.yaml` overlay**：仅当 `overlayEnv` 非空且主文件名为 `config.yaml` 时 merge
+5. **主配置**：`-c/--config` 指定的文件，或默认 `configs/config.yaml`
+6. **代码 `SetDefault`**
+
+**`app.env` 最终值**：`overlayEnv` 非空时锁定为该值；否则保留 YAML；仍为空则 `dev`。环境 overlay 文件不要写 `app.env`。
+
+**推荐用法**：
+
+- 本地：`serve` / `serve -c configs/config.yaml` → 只读主配置（开箱 SQLite）
+- 显式环境：`serve -e prod` 或 `APP_ENV=prod`
+- 逃生舱：`-c path/to/complete.yaml`（非 `config.yaml`）只加载该文件
+
+支持的环境名：`dev`、`prod`、`test`。CLI：`config validate`、`config show [--check]`。
 
 ## 健康检查端点
 

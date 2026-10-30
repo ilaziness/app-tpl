@@ -56,24 +56,21 @@ make build
 # Start the server with default config
 ./build/app-tpl serve
 
-# Start with specific environment (dev/prod/test)
+# Start with environment overlay (merges config.{env}.yaml onto config.yaml)
 ./build/app-tpl serve -e dev
 ./build/app-tpl serve -e prod
 ./build/app-tpl serve -e test
 
-# Start with specific config file
-./build/app-tpl serve -c configs/config.prod.yaml
+# Optional: explicit primary file (default is configs/config.yaml)
+./build/app-tpl serve -c configs/config.yaml -e prod
 
 # Show version
 ./build/app-tpl version
 
-# Validate configuration
-./build/app-tpl config validate -e dev
-./build/app-tpl config validate -c configs/config.prod.yaml
-
-# Show current configuration
-./build/app-tpl config show -e dev
-./build/app-tpl config show -c configs/config.prod.yaml
+# Validate / show effective config
+./build/app-tpl config validate -e prod
+./build/app-tpl config show -e prod
+./build/app-tpl config show --check -e prod
 
 # Database migrations
 ./build/app-tpl migrate up              # Run all pending migrations
@@ -95,31 +92,39 @@ make build
 
 Configuration can be provided via:
 
-1. **YAML files**: `configs/config.yaml` (base), `config.dev.yaml`, `config.prod.yaml`, `config.test.yaml`
-2. **Command-line**: `--env dev|prod|test` or `--config <path>`
-3. **Environment variables**: Only for sensitive data (passwords, API keys)
+1. **YAML files**: `configs/config.yaml` (full catalog), sparse overlays `config.{dev,prod,test}.yaml`
+2. **Command-line**: `--env / -e` selects an overlay; `--config / -c` sets the primary file (default `configs/config.yaml`)
+3. **Environment variables**: Only for secrets (passwords, API keys) — see `configs/.env.example`
 
-### Configuration Priority
+### Configuration Priority (high → low)
 
-`--config` > `--env` > `config.yaml` defaults
+1. `--env` / `APP_ENV` (selects overlay; locks `app.env` when set)
+2. Process env vars for sensitive fields only
+3. Optional dotenv files (fill unset secrets)
+4. `config.{env}.yaml` overlay — only when `--env` or `APP_ENV` is set **and** the primary file is named `config.yaml`
+5. Primary YAML (`-c` or `configs/config.yaml`)
+6. Built-in code defaults
+
+Bare `serve` (no `APP_ENV`) loads only the base catalog (SQLite-ready). Production: set `APP_ENV=prod` (or `-e prod`) and inject secrets; do not bake `APP_ENV` into the image.
 
 ### Configuration Files
 
-- `config.yaml` - Base configuration
-- `config.dev.yaml` - Development environment (use `--env dev`)
-- `config.prod.yaml` - Production environment (use `--env prod`)
-- `config.test.yaml` - Test environment (use `--env test`)
+- `config.yaml` — full catalog with comments for every key
+- `config.dev.yaml` / `config.prod.yaml` / `config.test.yaml` — sparse env overlays (no secrets, no `app.env`)
+- Escape hatch: `-c path/to/complete.yaml` (not named `config.yaml`) loads that file alone
 
 ### Environment Variables
-
-Environment variables are only used for sensitive data:
 
 ```bash
 export DATABASE_PASSWORD=
 export REDIS_PASSWORD=
+export JWT_SECRET=              # required in production (≥32 bytes)
+export HTTP_INTERNAL_SERVICE_KEY=
+export OBJECT_STORAGE_ACCESS_KEY=
+export OBJECT_STORAGE_SECRET_KEY=
 ```
 
-See `configs/.env.example` for available environment variables.
+See `configs/.env.example`. CLI helpers: `config validate`, `config show [--check]`.
 
 ## Database Integration
 

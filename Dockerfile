@@ -45,5 +45,5 @@ EXPOSE 8080 9000 9001
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
     CMD ["/app/app-tpl", "health"]
 
-# 启动应用
+# 启动应用（镜像不绑定 APP_ENV；生产请在运行时设置 APP_ENV=prod 并注入密钥）
 CMD ["/app/app-tpl", "serve", "-c", "/app/configs/config.yaml"]

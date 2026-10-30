@@ -1,20 +1,13 @@
-# Development environment configuration
-app:
-  env: dev
+# Development overlay — applied only when --env=dev or APP_ENV=dev
+# and the primary config file is config.yaml.
+# Keep sparse: only must-have / recommended overrides. No secrets. No app.env.
 
-http:
-  port: 8080
-  shutdown_timeout: 30
-
-log:
-  level: debug
-  format: console
-  output: stdout
-
-# Database configuration (SQLite for development)
 database:
   driver: sqlite
   database: ./data/app_dev.db
-  max_open_conns: 25
-  max_idle_conns: 10
-  conn_max_lifetime: 300
+
+# Optional local Redis (uncomment when needed):
+# redis:
+#   enabled: true
+#   host: localhost
+#   port: 6379

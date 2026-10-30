@@ -55,24 +55,21 @@ make build
 # 使用默认配置启动服务
 ./build/app-tpl serve
 
-# 使用指定环境启动（dev/prod/test）
+# 使用环境 overlay 启动（把 config.{env}.yaml 叠到 config.yaml 上）
 ./build/app-tpl serve -e dev
 ./build/app-tpl serve -e prod
 ./build/app-tpl serve -e test
 
-# 使用指定配置文件启动
-./build/app-tpl serve -c configs/config.prod.yaml
+# 可选：显式指定主配置（默认 configs/config.yaml）
+./build/app-tpl serve -c configs/config.yaml -e prod
 
 # 显示版本信息
 ./build/app-tpl version
 
-# 验证配置
-./build/app-tpl config validate -e dev
-./build/app-tpl config validate -c configs/config.prod.yaml
-
-# 显示当前配置
-./build/app-tpl config show -e dev
-./build/app-tpl config show -c configs/config.prod.yaml
+# 校验 / 查看生效配置
+./build/app-tpl config validate -e prod
+./build/app-tpl config show -e prod
+./build/app-tpl config show --check -e prod
 
 # 数据库迁移
 ./build/app-tpl migrate up              # 执行所有待执行的迁移
@@ -94,31 +91,39 @@ make build
 
 配置可以通过以下方式提供：
 
-1. **YAML 文件**：`configs/config.yaml`（基础配置）、`config.dev.yaml`、`config.prod.yaml`、`config.test.yaml`
-2. **命令行**：`--env dev|prod|test` 或 `--config <path>`
-3. **环境变量**：仅用于敏感数据（密码、API 密钥）
+1. **YAML 文件**：`configs/config.yaml`（完整目录）、稀疏覆盖 `config.{dev,prod,test}.yaml`
+2. **命令行**：`--env / -e` 选择 overlay；`--config / -c` 指定主配置（默认 `configs/config.yaml`）
+3. **环境变量**：仅用于密钥类字段（密码、API Key）——见 `configs/.env.example`
 
-### 配置优先级
+### 配置优先级（高 → 低）
 
-`--config` > `--env` > `config.yaml` 默认值
+1. `--env` / `APP_ENV`（选择 overlay；设置时锁定 `app.env`）
+2. 进程环境变量（仅敏感项）
+3. 可选 dotenv（只填补未设置的密钥）
+4. `config.{env}.yaml` overlay——仅当设置了 `--env` 或 `APP_ENV` **且** 主文件名为 `config.yaml` 时合并
+5. 主 YAML（`-c` 或 `configs/config.yaml`）
+6. 代码内置默认值
+
+未设置 `APP_ENV` 时，`serve` 只加载主配置目录（开箱 SQLite）。生产环境请设置 `APP_ENV=prod`（或 `-e prod`）并注入密钥；**不要**在镜像里写死 `APP_ENV`。
 
 ### 配置文件
 
-- `config.yaml` - 基础配置
-- `config.dev.yaml` - 开发环境（使用 `--env dev`）
-- `config.prod.yaml` - 生产环境（使用 `--env prod`）
-- `config.test.yaml` - 测试环境（使用 `--env test`）
+- `config.yaml` — 全量目录，每项带说明注释
+- `config.dev.yaml` / `config.prod.yaml` / `config.test.yaml` — 环境稀疏覆盖（不含密钥、不含 `app.env`）
+- 逃生舱：`-c path/to/complete.yaml`（文件名不是 `config.yaml`）只加载该文件
 
 ### 环境变量
-
-环境变量仅用于敏感数据：
 
 ```bash
 export DATABASE_PASSWORD=
 export REDIS_PASSWORD=
+export JWT_SECRET=              # 生产必填（至少 32 字节）
+export HTTP_INTERNAL_SERVICE_KEY=
+export OBJECT_STORAGE_ACCESS_KEY=
+export OBJECT_STORAGE_SECRET_KEY=
 ```
 
-查看 `configs/.env.example` 获取可用的环境变量。
+详见 `configs/.env.example`。CLI：`config validate`、`config show [--check]`。
 
 ## 数据库集成
 

@@ -13,11 +13,11 @@
 ### 依赖服务（可选）
 
 - **数据库**（三选一）：
-  - MySQL 5.7+
-  - PostgreSQL 12+
-  - SQLite 3+（无需额外安装）
+  - MySQL 8.0+（推荐 8.4）
+  - PostgreSQL 16+
+  - SQLite 3+（无需额外安装；默认开发配置）
 - **Redis**（可选，用于分布式限流和缓存）：
-  - Redis 6.0+
+  - Redis 7.0+
 
 ## 单实例部署
 
@@ -39,71 +39,73 @@ make build
 
 ### 2. 配置文件准备
 
-复制配置文件示例并根据环境修改：
-
-```bash
-cp configs/config.yaml configs/config.prod.yaml
-```
-
-编辑 `configs/config.prod.yaml`：
+主配置目录是 [`configs/config.yaml`](../configs/config.yaml)（全量可配置项说明）。按环境只改稀疏覆盖文件，例如编辑 [`configs/config.prod.yaml`](../configs/config.prod.yaml)：
 
 ```yaml
-app:
-  name: my-app
-  version: 1.0.0
-
+# 不要写 app.env / 密码；由 APP_ENV 与环境变量负责
 http:
-  enabled: true
-  host: 0.0.0.0
   port: 8080
 
-database:
-  enabled: true
-  driver: mysql  # 或 postgresql/sqlite
-  host: localhost
-  port: 3306
-  database: myapp
-  user: myapp
-  password: your_password
+log:
+  level: info
+  format: json
+  output: stdout
 
-redis:
-  enabled: true
-  host: localhost
-  port: 6379
-  password: ""
+database:
+  driver: mysql
+  host: db.example.com
+  port: 3306
+  user: app
+  database: app_tpl
+  max_open_conns: 50
+  max_idle_conns: 25
+```
+
+校验与查看生效配置：
+
+```bash
+./build/app-tpl config validate -e prod
+./build/app-tpl config show -e prod
 ```
 
 ### 3. 环境变量配置
 
-创建 `configs/.env` 文件（仅用于敏感信息）：
+密钥只放进程环境或 `configs/.env`（已 gitignore），不要写进 YAML：
 
 ```bash
 cp configs/.env.example configs/.env
 ```
 
-编辑 `configs/.env`：
+编辑 `configs/.env`（至少生产需要 `JWT_SECRET`）：
 
 ```bash
 DATABASE_PASSWORD=your_secure_password
 REDIS_PASSWORD=your_redis_password
+JWT_SECRET=change_me_to_a_random_string_at_least_32_chars
 ```
+
+或直接导出：`export APP_ENV=prod JWT_SECRET=... DATABASE_PASSWORD=...`
 
 ### 4. 数据库迁移
 
 ```bash
-# 执行数据库迁移
-./build/app-tpl migrate up -c configs/config.prod.yaml
+# 使用主配置 + 生产 overlay
+./build/app-tpl migrate up -c configs/config.yaml -e prod
 
 # 查看迁移状态
-./build/app-tpl migrate status -c configs/config.prod.yaml
+./build/app-tpl migrate status -c configs/config.yaml -e prod
 ```
 
 ### 5. 启动应用
 
 ```bash
-# 使用生产配置启动
-./build/app-tpl serve -c configs/config.prod.yaml
+# 推荐：主配置 + 环境选择符（合并 config.prod.yaml）
+./build/app-tpl serve -c configs/config.yaml -e prod
+
+# 等价：APP_ENV=prod ./build/app-tpl serve -c configs/config.yaml
 ```
+
+镜像默认不设置 `APP_ENV`（保持 SQLite 开箱）；生产容器/编排请注入 `APP_ENV=prod` 与密钥。
 
 ### 6. 验证部署
 
@@ -190,8 +192,8 @@ ratelimit:
 # 编译应用
 make build
 
-# 启动应用
-./build/app-tpl serve -c configs/config.prod.yaml
+# 启动应用（主配置 + 生产 overlay）
+./build/app-tpl serve -c configs/config.yaml -e prod
 ```
 
 ### 5. 健康检查配置
@@ -218,27 +220,31 @@ docker build -t app-tpl:1.0.0 .
 ### 2. 运行容器
 
 ```bash
-# 运行容器
+# 默认镜像不设 APP_ENV，使用 config.yaml（SQLite）。生产示例：
 docker run -d \
   --name app-tpl \
   -p 8080:8080 \
   -v $(pwd)/configs:/app/configs \
   -v $(pwd)/data:/app/data \
+  -e APP_ENV=prod \
   -e DATABASE_PASSWORD=your_password \
+  -e JWT_SECRET=change_me_to_a_random_string_at_least_32_chars \
   app-tpl:1.0.0
 ```
 
 ### 3. 环境变量配置
 
-通过 `-e` 仅传递敏感字段（其余配置写在 `configs/*.yaml`）：
+通过 `-e` 传递 `APP_ENV` 与敏感字段（其余非密钥配置写在 YAML overlay）：
 
 ```bash
 docker run -d \
   --name app-tpl \
   -p 8080:8080 \
   -v $(pwd)/configs:/app/configs \
+  -e APP_ENV=prod \
   -e DATABASE_PASSWORD=your_password \
   -e REDIS_PASSWORD=your_redis_password \
+  -e JWT_SECRET=change_me_to_a_random_string_at_least_32_chars \
   app-tpl:1.0.0
 ```
 

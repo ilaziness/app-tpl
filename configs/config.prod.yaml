@@ -1,30 +1,42 @@
-# Production environment configuration
-app:
-  env: prod
+# Production overlay — applied only when --env=prod or APP_ENV=prod
+# and the primary config file is config.yaml.
+# Keep sparse: only must-have / recommended overrides. No secrets. No app.env.
+# Inject secrets via environment / orchestrator (see configs/.env.example).
 
 http:
-  port: 80
-  shutdown_timeout: 30
+  port: 8080                   # non-privileged; put TLS at ingress / reverse proxy
 
 log:
   level: info
   format: json
-  output: both
-  filename: /var/log/app-tpl/app.log
-  max_size: 100
-  max_backups: 30
-  max_age: 7
-  compress: true
+  output: stdout               # preferred for containers / K8s
+  # For host installs that need files, use:
+  # output: both
+  # filename: /var/log/app-tpl/app.log
+  # max_size: 100
+  # max_backups: 30
+  # max_age: 7
+  # compress: true
 
-# Database configuration (MySQL/PostgreSQL for production)
 database:
   driver: mysql
-  host: ${DB_HOST}
+  host: db.example.com         # replace with your DB host
   port: 3306
-  user: ${DB_USER}
-  password: ${DB_PASSWORD}
-  database: ${DB_NAME}
-  ssl_mode: require
+  user: app
+  # password via DATABASE_PASSWORD
+  database: app_tpl
   max_open_conns: 50
   max_idle_conns: 25
   conn_max_lifetime: 300
+
+# Optional Redis for cache / rate limit / scheduler lock:
+# redis:
+#   enabled: true
+#   host: redis.example.com
+#   port: 6379
+#   # password via REDIS_PASSWORD
+
+metrics:
+  enabled: true
+  labels:
+    env: prod

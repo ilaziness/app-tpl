@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"testing"
 	"time"
 
@@ -19,6 +20,7 @@ func testdataDir() string {
 // mustLoad 从 testdata 加载配置，失败则 panic
 func mustLoad(t *testing.T, filename string) *Config {
 	t.Helper()
+	t.Setenv(EnvVarAppEnv, "")
 	cfg, err := LoadWithEnv(filepath.Join(testdataDir(), filename), "")
 	if err != nil {
 		t.Fatalf("failed to load config %q: %v", filename, err)
@@ -64,8 +66,9 @@ func TestConfigValidate(t *testing.T) {
 
 		// 无效配置
 		{"missing app name", Config{HTTP: HTTPConfig{Port: 8080}}, true, "app.name is required"},
-		{"port zero", Config{App: AppConfig{Name: "app"}, HTTP: HTTPConfig{Port: 0}}, true, "http.port must be between 1 and 65535"},
-		{"port too high", Config{App: AppConfig{Name: "app"}, HTTP: HTTPConfig{Port: 70000}}, true, "http.port must be between 1 and 65535"},
+		{"http disabled ignores port", Config{App: AppConfig{Name: "app"}, HTTP: HTTPConfig{Enabled: false, Port: 0}, Database: DatabaseConfig{Driver: "sqlite", Database: "test.db"}}, false, ""},
+		{"port zero", Config{App: AppConfig{Name: "app"}, HTTP: HTTPConfig{Enabled: true, Port: 0}}, true, "http.port must be between 1 and 65535"},
+		{"port too high", Config{App: AppConfig{Name: "app"}, HTTP: HTTPConfig{Enabled: true, Port: 70000}}, true, "http.port must be between 1 and 65535"},
 		{"invalid log level", Config{App: AppConfig{Name: "app"}, HTTP: HTTPConfig{Port: 8080}, Log: LogConfig{Level: "invalid"}}, true, "log.level must be one of: debug, info, warn, error"},
 		{"database missing driver", Config{App: AppConfig{Name: "app"}, HTTP: HTTPConfig{Port: 8080}, Database: DatabaseConfig{Driver: "", Database: "test.db"}}, true, "database.driver is required"},
 		{"database mysql no host", Config{App: AppConfig{Name: "app"}, HTTP: HTTPConfig{Port: 8080}, Database: DatabaseConfig{Driver: constant.DriverMySQL, Host: "", Database: "testdb"}}, true, "database.host is required"},
@@ -154,57 +157,9 @@ func TestUDPConfigGetShutdownTimeout(t *testing.T) {
 	}
 }
 
-// TestConfigMaskedPassword 测试密码脱敏
-func TestConfigMaskedPassword(t *testing.T) {
-	c := &Config{}
-	if got := c.MaskedPassword(); got != "******" {
-		t.Errorf("MaskedPassword() = %q, want %q", got, "******")
-	}
-}
-
-// TestConfigMaskedDatabasePassword 测试数据库密码脱敏
-func TestConfigMaskedDatabasePassword(t *testing.T) {
-	tests := []struct {
-		pwd  string
-		want string
-	}{
-		{"", ""},
-		{"secret", "******"},
-		{"verylongpassword123", "******"},
-	}
-
-	for _, tt := range tests {
-		t.Run("", func(t *testing.T) {
-			c := &Config{Database: DatabaseConfig{Password: tt.pwd}}
-			if got := c.MaskedDatabasePassword(); got != tt.want {
-				t.Errorf("MaskedDatabasePassword() = %q, want %q", got, tt.want)
-			}
-		})
-	}
-}
-
-// TestConfigMaskedRedisPassword 测试 Redis 密码脱敏
-func TestConfigMaskedRedisPassword(t *testing.T) {
-	tests := []struct {
-		pwd  string
-		want string
-	}{
-		{"", ""},
-		{"redis_secret", "******"},
-	}
-
-	for _, tt := range tests {
-		t.Run("", func(t *testing.T) {
-			c := &Config{Redis: RedisConfig{Password: tt.pwd}}
-			if got := c.MaskedRedisPassword(); got != tt.want {
-				t.Errorf("MaskedRedisPassword() = %q, want %q", got, tt.want)
-			}
-		})
-	}
-}
-
 // TestLoadWithEnvFromTestdata 从 testdata 加载配置
 func TestLoadWithEnvFromTestdata(t *testing.T) {
+	t.Setenv(EnvVarAppEnv, "")
 	tests := []struct {
 		name     string
 		filename string
@@ -231,13 +186,6 @@ func TestLoadWithEnvFromTestdata(t *testing.T) {
 				assertEq(t, "Database.Driver", cfg.Database.Driver, constant.DriverSQLite)
 			},
 		},
-		{
-			name:     "load with env override",
-			filename: "config.yaml",
-			check: func(t *testing.T, cfg *Config) {
-				// 手动测试环境覆盖在 TestLoadWithEnvMerge 中
-			},
-		},
 	}
 
 	for _, tt := range tests {
@@ -261,23 +209,84 @@ func TestLoadWithEnvMerge(t *testing.T) {
 		wantName    string
 		wantPort    int
 		wantLevel   string
+		wantEnv     string
 	}{
-		{"no override", "", "test-app", 9090, "info"},
-		{"dev override", "dev", "dev-app", 9091, "debug"},
-		{"prod override", "prod", "prod-app", 80, "warn"},
+		{"no override", "", "test-app", 9090, "info", "dev"},
+		{"dev override", "dev", "dev-app", 9091, "debug", "dev"},
+		{"prod override", "prod", "prod-app", 80, "warn", "prod"},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			cfg, err := LoadWithEnv(baseConfig, tt.envOverride)
+			t.Setenv(EnvVarAppEnv, "") // isolate from host APP_ENV
+			cfg, meta, err := LoadWithMeta(baseConfig, tt.envOverride)
 			if err != nil {
-				t.Fatalf("LoadWithEnv() error: %v", err)
+				t.Fatalf("LoadWithMeta() error: %v", err)
 			}
 			assertEq(t, "App.Name", cfg.App.Name, tt.wantName)
 			assertEq(t, "HTTP.Port", cfg.HTTP.Port, tt.wantPort)
 			assertEq(t, "Log.Level", cfg.Log.Level, tt.wantLevel)
+			assertEq(t, "App.Env", cfg.App.Env, tt.wantEnv)
+			if tt.envOverride == "" && meta.OverlayPath != "" {
+				t.Errorf("expected no overlay, got %q", meta.OverlayPath)
+			}
+			if tt.envOverride != "" && meta.OverlayPath == "" {
+				t.Error("expected overlay path to be set")
+			}
 		})
 	}
+}
+
+func TestLoadWithEnvNoOverlayForNonConfigYAML(t *testing.T) {
+	t.Setenv(EnvVarAppEnv, "")
+	minimal := filepath.Join(testdataDir(), "minimal.yaml")
+	cfg, meta, err := LoadWithMeta(minimal, "dev")
+	if err != nil {
+		t.Fatalf("LoadWithMeta() error: %v", err)
+	}
+	assertEq(t, "App.Name", cfg.App.Name, "minimal-app")
+	assertEq(t, "HTTP.Port", cfg.HTTP.Port, 8080) // defaults, not neighbor config.dev.yaml (9091)
+	assertEq(t, "App.Env", cfg.App.Env, "dev")    // locked by overlayEnv even without merge
+	if meta.OverlayPath != "" || meta.OverlayEnv != "" {
+		t.Errorf("minimal.yaml must not attempt overlay, path=%q env=%q", meta.OverlayPath, meta.OverlayEnv)
+	}
+}
+
+func TestLoadStandaloneProdFileKeepsEnv(t *testing.T) {
+	t.Setenv(EnvVarAppEnv, "")
+	cfg, meta, err := LoadWithMeta(filepath.Join(testdataDir(), "config.prod.yaml"), "")
+	if err != nil {
+		t.Fatalf("LoadWithMeta() error: %v", err)
+	}
+	assertEq(t, "App.Env", cfg.App.Env, "prod")
+	assertEq(t, "HTTP.Port", cfg.HTTP.Port, 80)
+	if meta.OverlayPath != "" {
+		t.Errorf("standalone overlay file must not self-merge, got %q", meta.OverlayPath)
+	}
+}
+
+func TestAPPEnvMergesOverlayWithoutFlag(t *testing.T) {
+	t.Setenv(EnvVarAppEnv, "prod")
+	cfg, meta, err := LoadWithMeta(filepath.Join(testdataDir(), "config.yaml"), "")
+	if err != nil {
+		t.Fatalf("LoadWithMeta() error: %v", err)
+	}
+	assertEq(t, "App.Name", cfg.App.Name, "prod-app")
+	assertEq(t, "App.Env", cfg.App.Env, "prod")
+	assertEq(t, "HTTP.Port", cfg.HTTP.Port, 80)
+	if meta.OverlayPath == "" {
+		t.Error("APP_ENV=prod should merge config.prod.yaml")
+	}
+}
+
+func TestEnvFlagOverridesYAMLAppEnv(t *testing.T) {
+	t.Setenv(EnvVarAppEnv, "")
+	// Load prod file but force env=test via flag (no overlay merge because basename != config.yaml)
+	cfg, err := LoadWithEnv(filepath.Join(testdataDir(), "config.prod.yaml"), "test")
+	if err != nil {
+		t.Fatalf("LoadWithEnv() error: %v", err)
+	}
+	assertEq(t, "App.Env", cfg.App.Env, "test")
 }
 
 // TestLoadWithEnvInvalid 测试无效配置加载
@@ -301,33 +310,59 @@ func TestLoadWithEnvInvalid(t *testing.T) {
 
 // TestEnvironmentVariables 测试环境变量绑定
 func TestEnvironmentVariables(t *testing.T) {
+	t.Setenv(EnvVarAppEnv, "")
 	t.Setenv(EnvVarDatabasePassword, "db_secret")
 	t.Setenv(EnvVarRedisPassword, "redis_secret")
+	t.Setenv(EnvVarJWTSecret, "jwt-secret-key-must-be-32-bytes!!")
+	t.Setenv(EnvVarHTTPInternalServiceKey, "internal-key")
+	t.Setenv(EnvVarObjectStorageAccessKey, "ak")
+	t.Setenv(EnvVarObjectStorageSecretKey, "sk")
 
 	cfg := mustLoad(t, "config.yaml")
 
-	// 环境变量应该在配置中体现（如果配置文件中已有这些字段）
-	if cfg.Database.Password != "db_secret" && cfg.Database.Password != "" {
-		t.Errorf("Database.Password = %q, want %q or empty", cfg.Database.Password, "db_secret")
+	assertEq(t, "Database.Password", cfg.Database.Password, "db_secret")
+	assertEq(t, "Redis.Password", cfg.Redis.Password, "redis_secret")
+	assertEq(t, "JWT.Secret", cfg.JWT.Secret, "jwt-secret-key-must-be-32-bytes!!")
+	assertEq(t, "HTTP.InternalServiceKey", cfg.HTTP.InternalServiceKey, "internal-key")
+	assertEq(t, "ObjectStorage.AccessKey", cfg.ObjectStorage.AccessKey, "ak")
+	assertEq(t, "ObjectStorage.SecretKey", cfg.ObjectStorage.SecretKey, "sk")
+}
+
+func TestMaskedCopyAndYAMLDump(t *testing.T) {
+	cfg := &Config{
+		App:      AppConfig{Name: "n", Env: "dev"},
+		Database: DatabaseConfig{Password: "secret"},
+		JWT:      JWTConfig{Secret: "jwt-secret-key-must-be-32-bytes!!"},
+	}
+	masked := cfg.MaskedCopy()
+	assertEq(t, "Database.Password", masked.Database.Password, "******")
+	assertEq(t, "JWT.Secret", masked.JWT.Secret, "******")
+	assertEq(t, "original Database.Password", cfg.Database.Password, "secret")
+
+	out, err := cfg.MarshalYAMLMasked()
+	if err != nil {
+		t.Fatalf("MarshalYAMLMasked: %v", err)
+	}
+	s := string(out)
+	if !strings.Contains(s, "******") {
+		t.Errorf("expected masked secrets in yaml, got:\n%s", s)
+	}
+	if strings.Contains(s, "jwt-secret-key-must-be-32-bytes!!") {
+		t.Error("raw jwt secret must not appear in dump")
 	}
 }
 
-// TestEnvOverridePriority 测试环境变量优先级
-func TestEnvOverridePriority(t *testing.T) {
-	// APP_ENV 应该被正确读取
-	t.Setenv("APP_ENV", "prod")
-	defer os.Unsetenv("APP_ENV")
-
-	// 直接加载配置，不指定 envOverride
-	cfg, err := LoadWithEnv(filepath.Join(testdataDir(), "config.yaml"), "")
+func TestEnvExampleListsAllSensitiveBinds(t *testing.T) {
+	examplePath := filepath.Join("..", "..", "configs", ".env.example")
+	data, err := os.ReadFile(examplePath)
 	if err != nil {
-		t.Fatalf("LoadWithEnv() error: %v", err)
+		t.Fatalf("read .env.example: %v", err)
 	}
-
-	// 注意：当前实现中 envOverride 参数优先级高于环境变量
-	// 这里只是验证配置能正常加载
-	if cfg.App.Name == "" {
-		t.Error("App.Name should not be empty")
+	content := string(data)
+	for _, b := range SensitiveBinds {
+		if !strings.Contains(content, b.EnvVar+"=") {
+			t.Errorf(".env.example missing %s=", b.EnvVar)
+		}
 	}
 }
 

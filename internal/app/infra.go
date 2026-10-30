@@ -39,7 +39,7 @@ func (a *App) wireInfra() error {
 	// Ensure utils.Go panic recovery can log.
 	utils.SetLogger(a.log)
 
-	// Response cause details only in development (avoids reading config.Cfg globally).
+	// Response cause details only in development.
 	response.Configure(a.cfg.App.Env == constant.EnvDev)
 
 	db, err := newDatabase(a.cfg, a.log)
