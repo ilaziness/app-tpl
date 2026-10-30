@@ -1,6 +1,7 @@
 package gen
 
 import (
+	"bytes"
 	"context"
 	"go/format"
 	"os"
@@ -36,7 +37,7 @@ func TestGetTableColumns_readsSQLiteColumns(t *testing.T) {
 	)`)
 	require.NoError(t, err)
 
-	columns, err := GetTableColumns(ctx, db, constant.DriverSQLite, "sample_items")
+	columns, err := GetTableColumns(ctx, db, constant.DriverSQLite, "", "sample_items")
 	require.NoError(t, err)
 	require.Len(t, columns, 3)
 
@@ -52,6 +53,21 @@ func TestGetTableColumns_readsSQLiteColumns(t *testing.T) {
 	assert.True(t, columns[2].Nullable)
 }
 
+func TestGetTableColumns_sqliteAutoincrementOnlyForIntegerPK(t *testing.T) {
+	db := testutil.OpenBunDB(t)
+	ctx := context.Background()
+
+	_, err := db.ExecContext(ctx, `CREATE TABLE int_pk (id INT PRIMARY KEY, title TEXT)`)
+	require.NoError(t, err)
+
+	columns, err := GetTableColumns(ctx, db, constant.DriverSQLite, "", "int_pk")
+	require.NoError(t, err)
+	id := findColumn(columns, "id")
+	require.NotNil(t, id)
+	assert.True(t, id.PrimaryKey)
+	assert.False(t, id.AutoIncrement)
+}
+
 func TestGetTableColumns_readsSQLiteUniqueConstraints(t *testing.T) {
 	db := testutil.OpenBunDB(t)
 	ctx := context.Background()
@@ -65,7 +81,7 @@ func TestGetTableColumns_readsSQLiteUniqueConstraints(t *testing.T) {
 	)`)
 	require.NoError(t, err)
 
-	columns, err := GetTableColumns(ctx, db, constant.DriverSQLite, "sample_items")
+	columns, err := GetTableColumns(ctx, db, constant.DriverSQLite, "", "sample_items")
 	require.NoError(t, err)
 
 	email := findColumn(columns, "email")
@@ -95,6 +111,7 @@ func findColumn(columns []Column, name string) *Column {
 func TestGenerateModelCode_addsUniqueTag(t *testing.T) {
 	code := GenerateModelCode(GenerateOptions{
 		PackageName: "model",
+		Driver:      constant.DriverMySQL,
 		JSONTags:    true,
 	}, "User", "users", []Column{
 		{Name: "id", Type: "bigint", Nullable: false, PrimaryKey: true, AutoIncrement: true},
@@ -109,6 +126,7 @@ func TestGenerateModelCode_addsUniqueTag(t *testing.T) {
 func TestGenerateModelCode_includesBunAndJSONTags(t *testing.T) {
 	code := GenerateModelCode(GenerateOptions{
 		PackageName:   "model",
+		Driver:        constant.DriverSQLite,
 		JSONTags:      true,
 		ValidatorTags: false,
 	}, "SampleItem", "sample_items", []Column{
@@ -117,14 +135,16 @@ func TestGenerateModelCode_includesBunAndJSONTags(t *testing.T) {
 	}, nil)
 
 	assert.Contains(t, code, "type SampleItem struct")
-	assert.Contains(t, code, "\tID int32 `bun:\"id,pk,autoincrement\" json:\"id\"`")
+	assert.Contains(t, code, "\tID int64 `bun:\"id,pk,autoincrement\" json:\"id\"`")
 	assert.Contains(t, code, "\tTitle string `bun:\"title,notnull\" json:\"title\"`")
 	assert.Contains(t, code, `bun:"table:sample_items,alias:si"`)
+	assert.Contains(t, code, "// Database driver: sqlite")
 }
 
 func TestGenerateModelCode_hidesPasswordJSON(t *testing.T) {
 	code := GenerateModelCode(GenerateOptions{
 		PackageName: "model",
+		Driver:      constant.DriverMySQL,
 		JSONTags:    true,
 	}, "Users", "users", []Column{
 		{Name: "id", Type: "bigint", Nullable: false},
@@ -166,11 +186,14 @@ func TestGenerateModels_writesGofmtFormattedFiles(t *testing.T) {
 	want, err := format.Source(got)
 	require.NoError(t, err)
 	assert.Equal(t, string(want), string(got), "generated file should already be gofmt-formatted")
+	assert.Contains(t, string(got), "int64")
+	assert.Contains(t, string(got), "// Database driver: sqlite")
 }
 
 func TestGenerateModelCode_includesGeneratedComment(t *testing.T) {
 	code := GenerateModelCode(GenerateOptions{
 		PackageName: "model",
+		Driver:      constant.DriverSQLite,
 	}, "SampleItem", "sample_items", []Column{
 		{Name: "id", Type: "INTEGER", Nullable: false, PrimaryKey: true, AutoIncrement: true},
 		{Name: "title", Type: "TEXT", Nullable: false},
@@ -182,6 +205,7 @@ func TestGenerateModelCode_includesGeneratedComment(t *testing.T) {
 func TestGenerateModelCode_generatesTimestampHook(t *testing.T) {
 	code := GenerateModelCode(GenerateOptions{
 		PackageName: "model",
+		Driver:      constant.DriverMySQL,
 	}, "Videos", "videos", []Column{
 		{Name: "id", Type: "bigint", Nullable: false, PrimaryKey: true, AutoIncrement: true, Unsigned: true},
 		{Name: "title", Type: "varchar", Nullable: false},
@@ -201,6 +225,7 @@ func TestGenerateModelCode_generatesTimestampHook(t *testing.T) {
 func TestGenerateModelCode_generatesHookForNonNullableTimestamps(t *testing.T) {
 	code := GenerateModelCode(GenerateOptions{
 		PackageName: "model",
+		Driver:      constant.DriverMySQL,
 	}, "Banners", "banners", []Column{
 		{Name: "id", Type: "bigint", Nullable: false, PrimaryKey: true, AutoIncrement: true, Unsigned: true},
 		{Name: "created_at", Type: "datetime", Nullable: false},
@@ -216,6 +241,7 @@ func TestGenerateModelCode_generatesHookForNonNullableTimestamps(t *testing.T) {
 func TestGenerateModelCode_generatesHookForCreatedAtOnly(t *testing.T) {
 	code := GenerateModelCode(GenerateOptions{
 		PackageName: "model",
+		Driver:      constant.DriverMySQL,
 	}, "CollectLogs", "collect_logs", []Column{
 		{Name: "id", Type: "bigint", Nullable: false, PrimaryKey: true, AutoIncrement: true, Unsigned: true},
 		{Name: "created_at", Type: "datetime", Nullable: true},
@@ -229,6 +255,7 @@ func TestGenerateModelCode_generatesHookForCreatedAtOnly(t *testing.T) {
 func TestGenerateModelCode_noHookWithoutTimestampColumns(t *testing.T) {
 	code := GenerateModelCode(GenerateOptions{
 		PackageName: "model",
+		Driver:      constant.DriverMySQL,
 	}, "VideoActors", "video_actors", []Column{
 		{Name: "id", Type: "bigint", Nullable: false, PrimaryKey: true, AutoIncrement: true, Unsigned: true},
 		{Name: "video_id", Type: "bigint", Nullable: false, Unsigned: true},
@@ -243,6 +270,7 @@ func TestGenerateModelCode_noHookWithoutTimestampColumns(t *testing.T) {
 func TestGenerateModelCode_addsSoftDeleteTag(t *testing.T) {
 	code := GenerateModelCode(GenerateOptions{
 		PackageName: "model",
+		Driver:      constant.DriverMySQL,
 		JSONTags:    true,
 	}, "Users", "users", []Column{
 		{Name: "id", Type: "bigint", Nullable: false, PrimaryKey: true, AutoIncrement: true},
@@ -262,6 +290,7 @@ func TestGenerateModelCode_addsSoftDeleteTag(t *testing.T) {
 func TestGenerateModelCode_noSoftDeleteWithoutDeletedAt(t *testing.T) {
 	code := GenerateModelCode(GenerateOptions{
 		PackageName: "model",
+		Driver:      constant.DriverSQLite,
 		JSONTags:    true,
 	}, "SampleItem", "sample_items", []Column{
 		{Name: "id", Type: "INTEGER", Nullable: false, PrimaryKey: true, AutoIncrement: true},
@@ -275,6 +304,7 @@ func TestGenerateModelCode_noSoftDeleteWithoutDeletedAt(t *testing.T) {
 func TestGenerateModelCode_noSoftDeleteForNonNullableDeletedAt(t *testing.T) {
 	code := GenerateModelCode(GenerateOptions{
 		PackageName: "model",
+		Driver:      constant.DriverMySQL,
 		JSONTags:    true,
 	}, "Users", "users", []Column{
 		{Name: "id", Type: "bigint", Nullable: false, PrimaryKey: true, AutoIncrement: true},
@@ -283,4 +313,67 @@ func TestGenerateModelCode_noSoftDeleteForNonNullableDeletedAt(t *testing.T) {
 
 	assert.Contains(t, code, "\tDeletedAt time.Time `bun:\"deleted_at,notnull\" json:\"deleted_at\"`")
 	assert.NotContains(t, code, "soft_delete")
+}
+
+func TestGenerateModelCode_writesDefaultTag(t *testing.T) {
+	code := GenerateModelCode(GenerateOptions{
+		PackageName: "model",
+		Driver:      constant.DriverSQLite,
+		JSONTags:    true,
+	}, "Items", "items", []Column{
+		{Name: "id", Type: "INTEGER", PrimaryKey: true, AutoIncrement: true},
+		{Name: "status", Type: "INTEGER", Default: "1"},
+		{Name: "created_at", Type: "DATETIME", Default: "CURRENT_TIMESTAMP"},
+	}, nil)
+
+	assert.Contains(t, code, `default:1`)
+	assert.Contains(t, code, `default:current_timestamp`)
+}
+
+func TestGenerateModels_dryRunDoesNotWriteFiles(t *testing.T) {
+	db := testutil.OpenBunDB(t)
+	ctx := context.Background()
+	_, err := db.ExecContext(ctx, `CREATE TABLE sample_items (id INTEGER PRIMARY KEY, title TEXT NOT NULL)`)
+	require.NoError(t, err)
+
+	outputDir := t.TempDir()
+	var buf bytes.Buffer
+	err = GenerateModels(ctx, db, constant.DriverSQLite, []string{"sample_items"}, GenerateOptions{
+		OutputDir:   outputDir,
+		PackageName: "model",
+		JSONTags:    true,
+		DryRun:      true,
+		Out:         &buf,
+	})
+	require.NoError(t, err)
+	assert.Contains(t, buf.String(), "// file: sample_items.gen.go")
+	assert.Contains(t, buf.String(), "type SampleItems struct")
+	_, err = os.Stat(filepath.Join(outputDir, "sample_items.gen.go"))
+	assert.Error(t, err)
+}
+
+func TestGenerateModels_excludeSkipsWrite(t *testing.T) {
+	db := testutil.OpenBunDB(t)
+	ctx := context.Background()
+	_, err := db.ExecContext(ctx, `CREATE TABLE categories (id INTEGER PRIMARY KEY)`)
+	require.NoError(t, err)
+	_, err = db.ExecContext(ctx, `CREATE TABLE videos (id INTEGER PRIMARY KEY, category_id INTEGER NOT NULL)`)
+	require.NoError(t, err)
+
+	outputDir := t.TempDir()
+	err = GenerateModels(ctx, db, constant.DriverSQLite, []string{"videos"}, GenerateOptions{
+		OutputDir:   outputDir,
+		PackageName: "model",
+		JSONTags:    true,
+		Exclude:     map[string]struct{}{"categories": {}},
+		Relations: []Relation{{
+			SourceTable: "videos", SourceColumn: "category_id",
+			TargetTable: "categories", TargetColumn: "id",
+		}},
+	})
+	require.NoError(t, err)
+	_, err = os.Stat(filepath.Join(outputDir, "videos.gen.go"))
+	require.NoError(t, err)
+	_, err = os.Stat(filepath.Join(outputDir, "categories.gen.go"))
+	assert.Error(t, err)
 }

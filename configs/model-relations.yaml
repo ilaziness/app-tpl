@@ -1,9 +1,10 @@
 # Logical database relations used by `app-tpl gen model`.
 # These declarations generate Bun relations without adding database foreign keys.
 #
-# Shorthand:
+# Shorthand (composite columns joined with +):
 # relations:
 #   - orders.user_id -> users.id
+#   - order_items.tenant_id+order_id -> orders.tenant_id+id
 #
 # Override relation field names when a table has multiple references to the same target:
 # relations:
@@ -11,4 +12,17 @@
 #     target: users.id
 #     field: Creator
 #     reverse_field: CreatedOrders
+#
+# Explicit many-to-many (junction FKs must already be declared as belongs-to / physical FKs):
+# relations:
+#   - type: many-to-many
+#     through: video_actors
+#     source: videos.id
+#     target: actors.id
+#     field: Actors
+#     reverse_field: Videos
+#
+# Self-relations default to Parent / Children (or Child for has-one).
+# Pure junction tables (two FKs + optional timestamps only) are auto-detected as m2m.
+# Register join models with db.RegisterModel before using m2m relations.
 relations: []

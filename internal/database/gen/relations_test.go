@@ -80,6 +80,28 @@ func TestLoadRelations_supportsShorthandAndOverrides(t *testing.T) {
 	}, relations)
 }
 
+func TestLoadRelations_supportsCompositeAndM2M(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "model-relations.yaml")
+	err := os.WriteFile(path, []byte(`relations:
+  - order_items.tenant_id+order_id -> orders.tenant_id+id
+  - type: many-to-many
+    through: video_actors
+    source: videos.id
+    target: actors.id
+    field: Actors
+    reverse_field: Videos
+`), 0o600)
+	require.NoError(t, err)
+
+	relations, err := LoadRelations(path)
+	require.NoError(t, err)
+	require.Len(t, relations, 2)
+	assert.Equal(t, "tenant_id+order_id", relations[0].SourceColumn)
+	assert.Equal(t, "tenant_id+id", relations[0].TargetColumn)
+	assert.Equal(t, RelationManyToMany, relations[1].Type)
+	assert.Equal(t, "video_actors", relations[1].Through)
+}
+
 func TestLoadRelations_rejectsInvalidShorthand(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "model-relations.yaml")
 	err := os.WriteFile(path, []byte("relations:\n  - videos.category_id categories.id\n"), 0o600)
@@ -109,6 +131,15 @@ func TestLoadRelations_rejectsUnknownObjectField(t *testing.T) {
 
 	_, err = LoadRelations(path)
 	assert.ErrorContains(t, err, "unknown relation field \"reverse_feild\"")
+}
+
+func TestLoadRelationsOptional_missingFile(t *testing.T) {
+	rels, err := LoadRelationsOptional(filepath.Join(t.TempDir(), "missing.yaml"), false)
+	require.NoError(t, err)
+	assert.Nil(t, rels)
+
+	_, err = LoadRelationsOptional(filepath.Join(t.TempDir(), "missing.yaml"), true)
+	assert.Error(t, err)
 }
 
 func TestMergeRelations_rejectsSelfRelationFieldConflict(t *testing.T) {
@@ -202,7 +233,6 @@ func TestGenerateModels_generatesLogicalRelationsWithoutForeignKeys(t *testing.T
 
 	videos, err := os.ReadFile(filepath.Join(outputDir, "videos.gen.go"))
 	require.NoError(t, err)
-	// gofmt may align struct fields; match on relation tag content.
 	assert.Contains(t, string(videos), `bun:"rel:belongs-to,join:category_id=id"`)
 	assert.Contains(t, string(videos), "Category")
 	assert.Contains(t, string(videos), "*Categories")
@@ -217,6 +247,7 @@ func TestGenerateModels_generatesLogicalRelationsWithoutForeignKeys(t *testing.T
 func TestGenerateModelCode_generatesBidirectionalRelations(t *testing.T) {
 	code := GenerateModelCode(GenerateOptions{
 		PackageName: "model",
+		Driver:      constant.DriverMySQL,
 		JSONTags:    true,
 	}, "Videos", "videos", []Column{
 		{Name: "id", Type: "bigint", PrimaryKey: true, AutoIncrement: true, Unsigned: true},
@@ -230,6 +261,7 @@ func TestGenerateModelCode_generatesBidirectionalRelations(t *testing.T) {
 
 	code = GenerateModelCode(GenerateOptions{
 		PackageName: "model",
+		Driver:      constant.DriverMySQL,
 		JSONTags:    true,
 	}, "Categories", "categories", []Column{
 		{Name: "id", Type: "bigint", PrimaryKey: true, AutoIncrement: true, Unsigned: true},
@@ -239,6 +271,47 @@ func TestGenerateModelCode_generatesBidirectionalRelations(t *testing.T) {
 	}})
 
 	assert.Contains(t, code, "\tVideos []*Videos `bun:\"rel:has-many,join:id=category_id\" json:\"-\"`")
+}
+
+func TestGenerateModelCode_hasOneAndSelfRelation(t *testing.T) {
+	code := GenerateModelCode(GenerateOptions{
+		PackageName: "model",
+		Driver:      constant.DriverMySQL,
+	}, "Users", "users", []Column{
+		{Name: "id", Type: "bigint", PrimaryKey: true},
+	}, []Relation{{
+		SourceTable: "profiles", SourceColumn: "user_id",
+		TargetTable: "users", TargetColumn: "id",
+		HasOne: true,
+	}})
+	assert.Contains(t, code, `rel:has-one,join:id=user_id`)
+
+	code = GenerateModelCode(GenerateOptions{
+		PackageName: "model",
+		Driver:      constant.DriverMySQL,
+	}, "Categories", "categories", []Column{
+		{Name: "id", Type: "bigint", PrimaryKey: true},
+		{Name: "parent_id", Type: "bigint"},
+	}, []Relation{{
+		SourceTable: "categories", SourceColumn: "parent_id",
+		TargetTable: "categories", TargetColumn: "id",
+	}})
+	assert.Contains(t, code, "\tParent *Categories")
+	assert.Contains(t, code, "\tChildren []*Categories")
+}
+
+func TestGenerateModelCode_compositeJoin(t *testing.T) {
+	code := GenerateModelCode(GenerateOptions{
+		PackageName: "model",
+		Driver:      constant.DriverMySQL,
+	}, "OrderItems", "order_items", []Column{
+		{Name: "tenant_id", Type: "bigint"},
+		{Name: "order_id", Type: "bigint"},
+	}, []Relation{{
+		SourceTable: "order_items", SourceColumn: "tenant_id+order_id",
+		TargetTable: "orders", TargetColumn: "tenant_id+id",
+	}})
+	assert.Contains(t, code, `join:tenant_id=tenant_id,order_id=id`)
 }
 
 func TestGenerateModels_expandsTablesToIncludeRelationEndpoints(t *testing.T) {
@@ -266,4 +339,105 @@ func TestGenerateModels_expandsTablesToIncludeRelationEndpoints(t *testing.T) {
 	require.NoError(t, err)
 	_, err = os.Stat(filepath.Join(outputDir, "categories.gen.go"))
 	require.NoError(t, err)
+}
+
+func TestGenerateModels_detectsPureM2M(t *testing.T) {
+	db := testutil.OpenBunDB(t)
+	ctx := context.Background()
+
+	_, err := db.ExecContext(ctx, `CREATE TABLE videos (id INTEGER PRIMARY KEY)`)
+	require.NoError(t, err)
+	_, err = db.ExecContext(ctx, `CREATE TABLE actors (id INTEGER PRIMARY KEY)`)
+	require.NoError(t, err)
+	_, err = db.ExecContext(ctx, `CREATE TABLE video_actors (
+		video_id INTEGER NOT NULL,
+		actor_id INTEGER NOT NULL,
+		PRIMARY KEY (video_id, actor_id)
+	)`)
+	require.NoError(t, err)
+
+	outputDir := t.TempDir()
+	err = GenerateModels(ctx, db, constant.DriverSQLite, []string{"videos", "actors", "video_actors"}, GenerateOptions{
+		OutputDir:   outputDir,
+		PackageName: "model",
+		JSONTags:    true,
+		Relations: []Relation{
+			{SourceTable: "video_actors", SourceColumn: "video_id", TargetTable: "videos", TargetColumn: "id"},
+			{SourceTable: "video_actors", SourceColumn: "actor_id", TargetTable: "actors", TargetColumn: "id"},
+		},
+	})
+	require.NoError(t, err)
+
+	videos, err := os.ReadFile(filepath.Join(outputDir, "videos.gen.go"))
+	require.NoError(t, err)
+	assert.Contains(t, string(videos), `m2m:video_actors`)
+	assert.NotContains(t, string(videos), `rel:has-many`)
+
+	actors, err := os.ReadFile(filepath.Join(outputDir, "actors.gen.go"))
+	require.NoError(t, err)
+	assert.Contains(t, string(actors), `m2m:video_actors`)
+
+	junction, err := os.ReadFile(filepath.Join(outputDir, "video_actors.gen.go"))
+	require.NoError(t, err)
+	assert.Contains(t, string(junction), `rel:belongs-to`)
+}
+
+func TestGenerateModels_doesNotTreatBusinessJoinAsM2M(t *testing.T) {
+	db := testutil.OpenBunDB(t)
+	ctx := context.Background()
+
+	_, err := db.ExecContext(ctx, `CREATE TABLE orders (id INTEGER PRIMARY KEY)`)
+	require.NoError(t, err)
+	_, err = db.ExecContext(ctx, `CREATE TABLE products (id INTEGER PRIMARY KEY)`)
+	require.NoError(t, err)
+	_, err = db.ExecContext(ctx, `CREATE TABLE order_items (
+		order_id INTEGER NOT NULL,
+		product_id INTEGER NOT NULL,
+		quantity INTEGER NOT NULL,
+		PRIMARY KEY (order_id, product_id)
+	)`)
+	require.NoError(t, err)
+
+	outputDir := t.TempDir()
+	err = GenerateModels(ctx, db, constant.DriverSQLite, []string{"orders", "products", "order_items"}, GenerateOptions{
+		OutputDir:   outputDir,
+		PackageName: "model",
+		Relations: []Relation{
+			{SourceTable: "order_items", SourceColumn: "order_id", TargetTable: "orders", TargetColumn: "id"},
+			{SourceTable: "order_items", SourceColumn: "product_id", TargetTable: "products", TargetColumn: "id"},
+		},
+	})
+	require.NoError(t, err)
+
+	orders, err := os.ReadFile(filepath.Join(outputDir, "orders.gen.go"))
+	require.NoError(t, err)
+	assert.NotContains(t, string(orders), `m2m:`)
+	assert.Contains(t, string(orders), `rel:has-many`)
+}
+
+func TestGenerateModels_hasOneFromUniqueFK(t *testing.T) {
+	db := testutil.OpenBunDB(t)
+	ctx := context.Background()
+
+	_, err := db.ExecContext(ctx, `CREATE TABLE users (id INTEGER PRIMARY KEY)`)
+	require.NoError(t, err)
+	_, err = db.ExecContext(ctx, `CREATE TABLE profiles (
+		user_id INTEGER PRIMARY KEY
+	)`)
+	require.NoError(t, err)
+
+	outputDir := t.TempDir()
+	err = GenerateModels(ctx, db, constant.DriverSQLite, []string{"users", "profiles"}, GenerateOptions{
+		OutputDir:   outputDir,
+		PackageName: "model",
+		Relations: []Relation{{
+			SourceTable: "profiles", SourceColumn: "user_id",
+			TargetTable: "users", TargetColumn: "id",
+		}},
+	})
+	require.NoError(t, err)
+
+	users, err := os.ReadFile(filepath.Join(outputDir, "users.gen.go"))
+	require.NoError(t, err)
+	assert.Contains(t, string(users), `rel:has-one,join:id=user_id`)
 }

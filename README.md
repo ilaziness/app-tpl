@@ -83,8 +83,9 @@ make build
 ./build/app-tpl migrate up --dry-run    # Preview migrations without executing
 
 # Code generation
-./build/app-tpl gen model               # Generate models from database
-./build/app-tpl gen model --table users --output ./internal/model
+./build/app-tpl gen model               # Generate models for the configured DB driver
+./build/app-tpl gen model --table users,orders --output ./internal/model
+./build/app-tpl gen model --dry-run --with-relations
 
 # Show help
 ./build/app-tpl --help

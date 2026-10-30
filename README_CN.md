@@ -81,9 +81,10 @@ make build
 ./build/app-tpl migrate create <name>   # 创建新的迁移文件
 ./build/app-tpl migrate up --dry-run    # 预览迁移而不执行
 
-# 代码生成
+# 代码生成（按当前数据库驱动生成合适的模型）
 ./build/app-tpl gen model               # 从数据库生成模型
-./build/app-tpl gen model --table users --output ./internal/model
+./build/app-tpl gen model --table users,orders --output ./internal/model
+./build/app-tpl gen model --dry-run --with-relations
 
 # 显示帮助信息
 ./build/app-tpl --help

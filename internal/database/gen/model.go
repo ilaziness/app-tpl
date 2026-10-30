@@ -3,9 +3,9 @@ package gen
 
 import (
 	"context"
-	"database/sql"
 	"fmt"
 	"go/format"
+	"io"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -41,6 +41,8 @@ var titleCaser = cases.Title(language.Und)
 type Column struct {
 	Name          string
 	Type          string
+	ColumnType    string // MySQL COLUMN_TYPE (e.g. tinyint(1), enum('a','b'))
+	UDTName       string // PostgreSQL udt_name
 	Nullable      bool
 	Default       string
 	Comment       string
@@ -49,23 +51,34 @@ type Column struct {
 	Unique        bool
 	UniqueGroup   string
 	Unsigned      bool
+	Length        int
+	ArrayDims     int
+	EnumValues    []string
 }
 
-// ForeignKey describes a foreign key column reference.
-type ForeignKey struct {
-	ColumnName           string
-	ReferencedTableName  string
-	ReferencedColumnName string
+// ForeignKeyConstraint describes a (possibly composite) foreign key.
+type ForeignKeyConstraint struct {
+	Name                string
+	Columns             []string
+	ReferencedTableName string
+	ReferencedColumns   []string
 }
 
 // GenerateOptions configures model code generation.
 type GenerateOptions struct {
 	OutputDir     string
 	PackageName   string
+	Driver        string
+	Schema        string
 	JSONTags      bool
 	ValidatorTags bool
 	WithRelations bool
+	NoExpand      bool
+	DryRun        bool
+	Exclude       map[string]struct{}
+	Aliases       map[string]string
 	Relations     []Relation
+	Out           io.Writer // dry-run destination; defaults to os.Stdout
 }
 
 // GenerateModels generates model files for the given tables.
@@ -73,32 +86,109 @@ func GenerateModels(ctx context.Context, db *database.DB, driver string, tables 
 	if len(tables) == 0 {
 		return nil
 	}
+	opts.Driver = driver
+
+	schema, err := resolveSchema(ctx, db, driver, opts.Schema)
+	if err != nil {
+		return err
+	}
+	opts.Schema = schema
 
 	if err := validateRelations(opts.Relations); err != nil {
 		return err
 	}
 
-	physicalRelations, err := getPhysicalRelations(ctx, db, driver, tables, opts.WithRelations)
-	if err != nil {
-		return fmt.Errorf("get physical relations: %w", err)
+	relations := opts.Relations
+	if !opts.NoExpand {
+		tables = expandTablesForRelations(tables, relations)
 	}
-	relations, err := mergeRelations(physicalRelations, opts.Relations)
+
+	if opts.WithRelations {
+		physical, err := getPhysicalRelations(ctx, db, driver, schema, tables)
+		if err != nil {
+			return fmt.Errorf("get physical relations: %w", err)
+		}
+		relations, err = mergeRelations(physical, relations)
+		if err != nil {
+			return err
+		}
+		if !opts.NoExpand {
+			tables = expandTablesForRelations(tables, relations)
+		}
+	}
+
+	columnsByTable := make(map[string][]Column, len(tables))
+	loadTable := func(tableName string) ([]Column, error) {
+		if cols, ok := columnsByTable[tableName]; ok {
+			return cols, nil
+		}
+		cols, err := GetTableColumns(ctx, db, driver, schema, tableName)
+		if err != nil {
+			return nil, err
+		}
+		columnsByTable[tableName] = cols
+		return cols, nil
+	}
+	for _, tableName := range tables {
+		if _, err := loadTable(tableName); err != nil {
+			return fmt.Errorf("read table %s: %w", tableName, err)
+		}
+	}
+	for _, rel := range relations {
+		for _, t := range []string{rel.SourceTable, rel.TargetTable, rel.Through} {
+			if t == "" {
+				continue
+			}
+			if _, err := loadTable(t); err != nil {
+				return fmt.Errorf("read relation table %s: %w", t, err)
+			}
+		}
+	}
+
+	uniqueSingle, pkCols := collectUniqueness(columnsByTable)
+	annotateHasOne(relations, uniqueSingle, pkCols)
+
+	autoM2M, suppress := detectPureM2MTables(columnsByTable, relations)
+	if len(autoM2M) > 0 {
+		relations = append(relations, autoM2M...)
+	}
+	relations = applySkipReverse(relations, suppress)
+	relations, err = mergeRelations(nil, relations)
 	if err != nil {
 		return err
 	}
 
-	tables = expandTablesForRelations(tables, relations)
-
-	if err := validateRelationColumns(ctx, db, driver, relations); err != nil {
+	relations, err = resolveM2MJoins(relations)
+	if err != nil {
 		return err
 	}
 
-	if err := os.MkdirAll(opts.OutputDir, 0o755); err != nil {
-		return fmt.Errorf("create output directory: %w", err)
+	if err := validateRelationColumns(columnsByTable, relations); err != nil {
+		return err
+	}
+
+	opts.Aliases = UniqueAliases(tables)
+
+	if !opts.DryRun {
+		if err := os.MkdirAll(opts.OutputDir, 0o755); err != nil {
+			return fmt.Errorf("create output directory: %w", err)
+		}
+	}
+
+	out := opts.Out
+	if out == nil {
+		out = os.Stdout
 	}
 
 	for _, tableName := range tables {
-		if err := generateModel(ctx, db, driver, tableName, opts, relations); err != nil {
+		if _, skip := opts.Exclude[tableName]; skip {
+			continue
+		}
+		columns, err := loadTable(tableName)
+		if err != nil {
+			return fmt.Errorf("generate model for table %s: %w", tableName, err)
+		}
+		if err := writeModel(opts, tableName, columns, relations, out); err != nil {
 			return fmt.Errorf("generate model for table %s: %w", tableName, err)
 		}
 	}
@@ -106,67 +196,16 @@ func GenerateModels(ctx context.Context, db *database.DB, driver string, tables 
 	return nil
 }
 
-// GetTables returns user table names for the configured driver.
-func GetTables(ctx context.Context, db *database.DB, driver string) ([]string, error) {
-	var query string
-
+func resolveSchema(ctx context.Context, db *database.DB, driver, schema string) (string, error) {
 	switch driver {
-	case constant.DriverMySQL:
-		query = "SELECT table_name FROM information_schema.tables WHERE table_schema = DATABASE() AND table_type = 'BASE TABLE'"
 	case constant.DriverPostgres, constant.DriverPostgreSQL:
-		query = "SELECT table_name FROM information_schema.tables WHERE table_schema = 'public' AND table_type = 'BASE TABLE'"
-	case constant.DriverSQLite, constant.DriverSQLite3:
-		query = "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'"
+		return resolvePostgresSchema(ctx, db, schema)
 	default:
-		return nil, fmt.Errorf("unsupported database driver: %s", driver)
-	}
-
-	rows, err := db.QueryContext(ctx, query)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	var tables []string
-	for rows.Next() {
-		var tableName string
-		if err := rows.Scan(&tableName); err != nil {
-			return nil, err
-		}
-		// Skip Bun migration bookkeeping tables.
-		if tableName == "bun_migrations" || tableName == "bun_migration_locks" {
-			continue
-		}
-		tables = append(tables, tableName)
-	}
-
-	return tables, rows.Err()
-}
-
-// GetTableColumns returns column metadata for a table.
-func GetTableColumns(ctx context.Context, db *database.DB, driver, tableName string) ([]Column, error) {
-	if err := validateTableName(tableName); err != nil {
-		return nil, err
-	}
-
-	switch driver {
-	case constant.DriverMySQL:
-		return getMySQLColumns(ctx, db, tableName)
-	case constant.DriverPostgres, constant.DriverPostgreSQL:
-		return getPostgresColumns(ctx, db, tableName)
-	case constant.DriverSQLite, constant.DriverSQLite3:
-		return getSQLiteColumns(ctx, db, tableName)
-	default:
-		return nil, fmt.Errorf("unsupported database driver: %s", driver)
+		return schema, nil
 	}
 }
 
-func generateModel(ctx context.Context, db *database.DB, driver, tableName string, opts GenerateOptions, relations []Relation) error {
-	columns, err := GetTableColumns(ctx, db, driver, tableName)
-	if err != nil {
-		return err
-	}
-
+func writeModel(opts GenerateOptions, tableName string, columns []Column, relations []Relation, out io.Writer) error {
 	modelName := ToCamelCase(tableName)
 	code := GenerateModelCode(opts, modelName, tableName, columns, relations)
 
@@ -175,206 +214,65 @@ func generateModel(ctx context.Context, db *database.DB, driver, tableName strin
 		return fmt.Errorf("format generated code: %w", err)
 	}
 
-	filename := filepath.Join(opts.OutputDir, strings.ToLower(tableName)+".gen.go")
-	if err := os.WriteFile(filename, formatted, 0o644); err != nil {
+	filename := strings.ToLower(tableName) + ".gen.go"
+	if opts.DryRun {
+		_, err := fmt.Fprintf(out, "// file: %s\n%s", filename, formatted)
 		return err
 	}
 
-	return nil
+	return os.WriteFile(filepath.Join(opts.OutputDir, filename), formatted, 0o644)
 }
 
-func getMySQLColumns(ctx context.Context, db *database.DB, tableName string) ([]Column, error) {
-	query := `
-		SELECT c.column_name, c.data_type, c.column_type, c.is_nullable, c.column_default, c.column_comment, c.extra,
-			COALESCE(p.is_primary, 0) AS is_primary_key
-		FROM information_schema.columns c
-		LEFT JOIN (
-			SELECT kcu.column_name, 1 AS is_primary
-			FROM information_schema.key_column_usage kcu
-			JOIN information_schema.table_constraints tc
-				ON kcu.table_schema = tc.table_schema
-				AND kcu.table_name = tc.table_name
-				AND kcu.constraint_name = tc.constraint_name
-			WHERE kcu.table_schema = DATABASE() AND kcu.table_name = ? AND tc.constraint_type = 'PRIMARY KEY'
-		) p ON c.column_name = p.column_name
-		WHERE c.table_schema = DATABASE() AND c.table_name = ?
-		ORDER BY c.ordinal_position
-	`
-
-	rows, err := db.QueryContext(ctx, query, tableName, tableName)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	columns, err := scanMySQLColumns(rows)
-	if err != nil {
-		return nil, err
-	}
-
-	groups, err := getMySQLUniqueGroups(ctx, db, tableName)
-	if err != nil {
-		return nil, err
-	}
-	applyUniqueConstraints(columns, groups)
-
-	return columns, nil
+// GetTables returns user table names for the configured driver.
+func GetTables(ctx context.Context, db *database.DB, driver string) ([]string, error) {
+	return GetTablesInSchema(ctx, db, driver, "")
 }
 
-func getPostgresColumns(ctx context.Context, db *database.DB, tableName string) ([]Column, error) {
-	query := `
-		SELECT c.column_name, c.data_type, c.is_nullable, c.column_default, '' as column_comment, c.is_identity,
-			COALESCE(p.is_primary, 0) AS is_primary_key
-		FROM information_schema.columns c
-		LEFT JOIN (
-			SELECT kcu.column_name, 1 AS is_primary
-			FROM information_schema.key_column_usage kcu
-			JOIN information_schema.table_constraints tc
-				ON kcu.table_schema = tc.table_schema
-				AND kcu.table_name = tc.table_name
-				AND kcu.constraint_name = tc.constraint_name
-			WHERE kcu.table_schema = 'public' AND kcu.table_name = $1 AND tc.constraint_type = 'PRIMARY KEY'
-		) p ON c.column_name = p.column_name
-		WHERE c.table_schema = 'public' AND c.table_name = $1
-		ORDER BY c.ordinal_position
-	`
-
-	rows, err := db.QueryContext(ctx, query, tableName)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	columns, err := scanPostgresColumns(rows)
-	if err != nil {
-		return nil, err
-	}
-
-	groups, err := getPostgresUniqueGroups(ctx, db, tableName)
-	if err != nil {
-		return nil, err
-	}
-	applyUniqueConstraints(columns, groups)
-
-	return columns, nil
-}
-
-func getSQLiteColumns(ctx context.Context, db *database.DB, tableName string) ([]Column, error) {
-	query := fmt.Sprintf("PRAGMA table_info(%q)", tableName)
-
-	rows, err := db.QueryContext(ctx, query)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	type rawColumn struct {
-		cid       int
-		name      string
-		dataType  string
-		notNull   int
-		dfltValue sql.NullString
-		pk        int
-	}
-
-	var rawCols []rawColumn
-	for rows.Next() {
-		var r rawColumn
-		if scanErr := rows.Scan(&r.cid, &r.name, &r.dataType, &r.notNull, &r.dfltValue, &r.pk); scanErr != nil {
-			return nil, scanErr
-		}
-		rawCols = append(rawCols, r)
-	}
-	if rowsErr := rows.Err(); rowsErr != nil {
-		return nil, rowsErr
-	}
-
-	pkCount := 0
-	for _, r := range rawCols {
-		if r.pk > 0 {
-			pkCount++
-		}
-	}
-
-	var columns []Column
-	for _, r := range rawCols {
-		primaryKey := r.pk > 0
-		autoIncrement := primaryKey && pkCount == 1 && strings.EqualFold(r.dataType, "integer")
-		columns = append(columns, Column{
-			Name:          r.name,
-			Type:          r.dataType,
-			Nullable:      r.notNull == 0 && !primaryKey,
-			Default:       r.dfltValue.String,
-			PrimaryKey:    primaryKey,
-			AutoIncrement: autoIncrement,
-		})
-	}
-
-	groups, err := getSQLiteUniqueGroups(ctx, db, tableName)
-	if err != nil {
-		return nil, err
-	}
-	applyUniqueConstraints(columns, groups)
-
-	return columns, nil
-}
-
-func scanMySQLColumns(rows *sql.Rows) ([]Column, error) {
-	var columns []Column
-	for rows.Next() {
-		var columnName, dataType, columnType, isNullable sql.NullString
-		var columnDefault, columnComment, extra sql.NullString
-		var isPrimaryKey int
-
-		if err := rows.Scan(&columnName, &dataType, &columnType, &isNullable, &columnDefault, &columnComment, &extra, &isPrimaryKey); err != nil {
+// GetTablesInSchema returns user table names, optionally scoped to a PostgreSQL schema.
+func GetTablesInSchema(ctx context.Context, db *database.DB, driver, schema string) ([]string, error) {
+	switch driver {
+	case constant.DriverMySQL:
+		return listMySQLTables(ctx, db)
+	case constant.DriverPostgres, constant.DriverPostgreSQL:
+		resolved, err := resolvePostgresSchema(ctx, db, schema)
+		if err != nil {
 			return nil, err
 		}
-
-		columns = append(columns, Column{
-			Name:          columnName.String,
-			Type:          dataType.String,
-			Nullable:      isNullable.String == "YES",
-			Default:       columnDefault.String,
-			Comment:       columnComment.String,
-			PrimaryKey:    isPrimaryKey == 1,
-			AutoIncrement: strings.Contains(strings.ToLower(extra.String), "auto_increment"),
-			Unsigned:      strings.Contains(strings.ToLower(columnType.String), "unsigned"),
-		})
+		return listPostgresTables(ctx, db, resolved)
+	case constant.DriverSQLite, constant.DriverSQLite3:
+		return listSQLiteTables(ctx, db)
+	default:
+		return nil, fmt.Errorf("unsupported database driver: %s", driver)
 	}
-
-	return columns, rows.Err()
 }
 
-func scanPostgresColumns(rows *sql.Rows) ([]Column, error) {
-	var columns []Column
-	for rows.Next() {
-		var columnName, dataType, isNullable, columnDefault, columnComment, isIdentity sql.NullString
-		var isPrimaryKey int
+// GetTableColumns returns column metadata for a table.
+func GetTableColumns(ctx context.Context, db *database.DB, driver, schema, tableName string) ([]Column, error) {
+	if err := validateTableName(tableName); err != nil {
+		return nil, err
+	}
 
-		if err := rows.Scan(&columnName, &dataType, &isNullable, &columnDefault, &columnComment, &isIdentity, &isPrimaryKey); err != nil {
+	switch driver {
+	case constant.DriverMySQL:
+		return getMySQLColumns(ctx, db, tableName)
+	case constant.DriverPostgres, constant.DriverPostgreSQL:
+		resolved, err := resolvePostgresSchema(ctx, db, schema)
+		if err != nil {
 			return nil, err
 		}
-
-		autoIncrement := isIdentity.Valid && isIdentity.String == "YES"
-		if !autoIncrement {
-			autoIncrement = strings.Contains(columnDefault.String, "nextval")
-		}
-
-		columns = append(columns, Column{
-			Name:          columnName.String,
-			Type:          dataType.String,
-			Nullable:      isNullable.String == "YES",
-			Default:       columnDefault.String,
-			Comment:       columnComment.String,
-			PrimaryKey:    isPrimaryKey == 1,
-			AutoIncrement: autoIncrement,
-		})
+		return getPostgresColumns(ctx, db, resolved, tableName)
+	case constant.DriverSQLite, constant.DriverSQLite3:
+		return getSQLiteColumns(ctx, db, tableName)
+	default:
+		return nil, fmt.Errorf("unsupported database driver: %s", driver)
 	}
-
-	return columns, rows.Err()
 }
 
-func scanUniqueGroups(rows *sql.Rows) (map[string][]string, error) {
+func scanUniqueGroups(rows interface {
+	Next() bool
+	Scan(dest ...any) error
+	Err() error
+}) (map[string][]string, error) {
 	groups := make(map[string][]string)
 	for rows.Next() {
 		var constraintName, columnName string
@@ -395,7 +293,6 @@ func applyUniqueConstraints(columns []Column, groups map[string][]string) {
 	for k := range groups {
 		keys = append(keys, k)
 	}
-	// Prefer single-column unique constraints, then multi-column groups.
 	sort.Slice(keys, func(i, j int) bool {
 		li, lj := len(groups[keys[i]]), len(groups[keys[j]])
 		if li != lj {
@@ -411,8 +308,6 @@ func applyUniqueConstraints(columns []Column, groups map[string][]string) {
 				if columns[i].Name != colName || columns[i].Unique {
 					continue
 				}
-				// Skip single-column unique on primary keys (redundant);
-				// allow PK columns in composite unique groups.
 				if columns[i].PrimaryKey && len(cols) == 1 {
 					continue
 				}
@@ -425,275 +320,131 @@ func applyUniqueConstraints(columns []Column, groups map[string][]string) {
 	}
 }
 
-func getMySQLUniqueGroups(ctx context.Context, db *database.DB, tableName string) (map[string][]string, error) {
-	query := `
-		SELECT tc.constraint_name, kcu.column_name
-		FROM information_schema.table_constraints tc
-		JOIN information_schema.key_column_usage kcu
-			ON tc.table_schema = kcu.table_schema
-			AND tc.table_name = kcu.table_name
-			AND tc.constraint_name = kcu.constraint_name
-		WHERE tc.table_schema = DATABASE() AND tc.table_name = ? AND tc.constraint_type = 'UNIQUE'
-		ORDER BY tc.constraint_name, kcu.ordinal_position
-	`
-
-	rows, err := db.QueryContext(ctx, query, tableName)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	return scanUniqueGroups(rows)
-}
-
-func getPostgresUniqueGroups(ctx context.Context, db *database.DB, tableName string) (map[string][]string, error) {
-	query := `
-		SELECT tc.constraint_name, kcu.column_name
-		FROM information_schema.table_constraints tc
-		JOIN information_schema.key_column_usage kcu
-			ON tc.table_schema = kcu.table_schema
-			AND tc.table_name = kcu.table_name
-			AND tc.constraint_name = kcu.constraint_name
-		WHERE tc.table_schema = 'public' AND tc.table_name = $1 AND tc.constraint_type = 'UNIQUE'
-		ORDER BY tc.constraint_name, kcu.ordinal_position
-	`
-
-	rows, err := db.QueryContext(ctx, query, tableName)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	return scanUniqueGroups(rows)
-}
-
-func getSQLiteUniqueGroups(ctx context.Context, db *database.DB, tableName string) (map[string][]string, error) {
-	query := fmt.Sprintf("PRAGMA index_list(%q)", tableName)
-
-	rows, err := db.QueryContext(ctx, query)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	type indexInfo struct {
-		name   string
-		unique int
-		origin string
-	}
-
-	var indexes []indexInfo
-	for rows.Next() {
-		var seq, partial int
-		var name, origin string
-		var unique int
-		if err := rows.Scan(&seq, &name, &unique, &origin, &partial); err != nil {
-			return nil, err
-		}
-		if unique == 1 && origin != "pk" {
-			indexes = append(indexes, indexInfo{name: name, unique: unique, origin: origin})
-		}
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-
-	groups := make(map[string][]string)
-	for _, idx := range indexes {
-		colQuery := fmt.Sprintf("SELECT seqno, name FROM pragma_index_info('%s') ORDER BY seqno", strings.ReplaceAll(idx.name, "'", "''"))
-		colRows, err := db.QueryContext(ctx, colQuery)
-		if err != nil {
-			return nil, err
-		}
-		for colRows.Next() {
-			var seqno int
-			var colName string
-			if err := colRows.Scan(&seqno, &colName); err != nil {
-				colRows.Close()
-				return nil, err
+func collectUniqueness(columnsByTable map[string][]Column) (uniqueSingle map[string]map[string]bool, pkCols map[string]map[string]bool) {
+	uniqueSingle = make(map[string]map[string]bool)
+	pkCols = make(map[string]map[string]bool)
+	for table, columns := range columnsByTable {
+		u := make(map[string]bool)
+		p := make(map[string]bool)
+		for _, col := range columns {
+			if col.PrimaryKey {
+				p[col.Name] = true
 			}
-			groups[idx.name] = append(groups[idx.name], colName)
+			if col.Unique && col.UniqueGroup == "" {
+				u[col.Name] = true
+			}
 		}
-		if err := colRows.Err(); err != nil {
-			colRows.Close()
-			return nil, err
-		}
-		colRows.Close()
+		uniqueSingle[table] = u
+		pkCols[table] = p
 	}
-
-	return groups, nil
+	return uniqueSingle, pkCols
 }
 
-func getForeignKeys(ctx context.Context, db *database.DB, driver, tableName string) ([]ForeignKey, error) {
+func getForeignKeyConstraints(ctx context.Context, db *database.DB, driver, schema, tableName string) ([]ForeignKeyConstraint, error) {
 	switch driver {
 	case constant.DriverMySQL:
-		return getMySQLForeignKeys(ctx, db, tableName)
+		return getMySQLForeignKeyConstraints(ctx, db, tableName)
 	case constant.DriverPostgres, constant.DriverPostgreSQL:
-		return getPostgresForeignKeys(ctx, db, tableName)
+		return getPostgresForeignKeyConstraints(ctx, db, schema, tableName)
 	case constant.DriverSQLite, constant.DriverSQLite3:
-		return getSQLiteForeignKeys(ctx, db, tableName)
+		return getSQLiteForeignKeyConstraints(ctx, db, tableName)
 	default:
 		return nil, fmt.Errorf("unsupported database driver: %s", driver)
 	}
 }
 
-func getMySQLForeignKeys(ctx context.Context, db *database.DB, tableName string) ([]ForeignKey, error) {
-	query := `
-		SELECT kcu.column_name, kcu.referenced_table_name, kcu.referenced_column_name
-		FROM information_schema.key_column_usage kcu
-		WHERE kcu.table_schema = DATABASE() AND kcu.table_name = ?
-			AND kcu.referenced_table_name IS NOT NULL
-	`
-
-	rows, err := db.QueryContext(ctx, query, tableName)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	return scanForeignKeys(rows)
-}
-
-func getPostgresForeignKeys(ctx context.Context, db *database.DB, tableName string) ([]ForeignKey, error) {
-	query := `
-		SELECT kcu.column_name, ccu.table_name, ccu.column_name
-		FROM information_schema.table_constraints tc
-		JOIN information_schema.key_column_usage kcu ON tc.constraint_name = kcu.constraint_name
-		JOIN information_schema.constraint_column_usage ccu ON kcu.constraint_name = ccu.constraint_name
-		WHERE tc.constraint_type = 'FOREIGN KEY'
-			AND tc.table_schema = 'public' AND tc.table_name = $1
-			AND ccu.table_schema = 'public'
-	`
-
-	rows, err := db.QueryContext(ctx, query, tableName)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	return scanForeignKeys(rows)
-}
-
-func getSQLiteForeignKeys(ctx context.Context, db *database.DB, tableName string) ([]ForeignKey, error) {
-	query := fmt.Sprintf("PRAGMA foreign_key_list(%q)", tableName)
-
-	rows, err := db.QueryContext(ctx, query)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	var keys []ForeignKey
-	for rows.Next() {
-		var id, seq int
-		var table, from, to, onUpdate, onDelete sql.NullString
-		var match sql.NullString
-
-		if err := rows.Scan(&id, &seq, &table, &from, &to, &onUpdate, &onDelete, &match); err != nil {
-			return nil, err
-		}
-
-		if table.Valid {
-			keys = append(keys, ForeignKey{
-				ColumnName:           from.String,
-				ReferencedTableName:  table.String,
-				ReferencedColumnName: to.String,
-			})
-		}
-	}
-
-	return keys, rows.Err()
-}
-
-func scanForeignKeys(rows *sql.Rows) ([]ForeignKey, error) {
-	var keys []ForeignKey
-	for rows.Next() {
-		var columnName, referencedTableName, referencedColumnName sql.NullString
-
-		if err := rows.Scan(&columnName, &referencedTableName, &referencedColumnName); err != nil {
-			return nil, err
-		}
-
-		if referencedColumnName.Valid {
-			keys = append(keys, ForeignKey{
-				ColumnName:           columnName.String,
-				ReferencedTableName:  referencedTableName.String,
-				ReferencedColumnName: referencedColumnName.String,
-			})
-		}
-	}
-
-	return keys, rows.Err()
-}
-
-func getPhysicalRelations(ctx context.Context, db *database.DB, driver string, tables []string, enabled bool) ([]Relation, error) {
-	if !enabled {
-		return nil, nil
-	}
-
+func getPhysicalRelations(ctx context.Context, db *database.DB, driver, schema string, tables []string) ([]Relation, error) {
 	var relations []Relation
 	for _, tableName := range tables {
-		foreignKeys, err := getForeignKeys(ctx, db, driver, tableName)
+		fks, err := getForeignKeyConstraints(ctx, db, driver, schema, tableName)
 		if err != nil {
 			return nil, fmt.Errorf("get foreign keys for table %s: %w", tableName, err)
 		}
-		for _, foreignKey := range foreignKeys {
+		for _, fk := range fks {
 			relations = append(relations, Relation{
 				SourceTable:  tableName,
-				SourceColumn: foreignKey.ColumnName,
-				TargetTable:  foreignKey.ReferencedTableName,
-				TargetColumn: foreignKey.ReferencedColumnName,
+				SourceColumn: strings.Join(fk.Columns, "+"),
+				TargetTable:  fk.ReferencedTableName,
+				TargetColumn: strings.Join(fk.ReferencedColumns, "+"),
 			})
 		}
 	}
 	return relations, nil
 }
 
-func validateRelationColumns(ctx context.Context, db *database.DB, driver string, relations []Relation) error {
-	columnsByTable := make(map[string]map[string]struct{})
-	fieldsByTable := make(map[string]map[string]struct{})
-	loadColumns := func(tableName string) (map[string]struct{}, map[string]struct{}, error) {
-		if columns, ok := columnsByTable[tableName]; ok {
-			return columns, fieldsByTable[tableName], nil
+func validateRelationColumns(columnsByTable map[string][]Column, relations []Relation) error {
+	type tableMeta struct {
+		columns map[string]struct{}
+		fields  map[string]struct{}
+	}
+	meta := make(map[string]tableMeta, len(columnsByTable))
+	load := func(table string) (tableMeta, error) {
+		if m, ok := meta[table]; ok {
+			return m, nil
 		}
-		columns, err := GetTableColumns(ctx, db, driver, tableName)
-		if err != nil {
-			return nil, nil, fmt.Errorf("read relation table %s: %w", tableName, err)
+		cols, ok := columnsByTable[table]
+		if !ok {
+			return tableMeta{}, fmt.Errorf("unknown table %s", table)
 		}
-		columnNames := make(map[string]struct{}, len(columns))
-		fieldNames := make(map[string]struct{}, len(columns)+1)
-		fieldNames["BaseModel"] = struct{}{}
-		for _, column := range columns {
-			columnNames[column.Name] = struct{}{}
-			fieldNames[ToCamelCase(column.Name)] = struct{}{}
+		m := tableMeta{
+			columns: make(map[string]struct{}, len(cols)),
+			fields:  map[string]struct{}{"BaseModel": {}},
 		}
-		columnsByTable[tableName] = columnNames
-		fieldsByTable[tableName] = fieldNames
-		return columnNames, fieldNames, nil
+		for _, column := range cols {
+			m.columns[column.Name] = struct{}{}
+			m.fields[ToCamelCase(column.Name)] = struct{}{}
+		}
+		meta[table] = m
+		return m, nil
 	}
 
 	for _, relation := range relations {
-		sourceColumns, sourceFields, err := loadColumns(relation.SourceTable)
+		field, reverseField := relationFieldNames(relation)
+
+		if relation.Type == RelationManyToMany {
+			src, err := load(relation.SourceTable)
+			if err != nil {
+				return err
+			}
+			if _, ok := src.fields[field]; ok {
+				return fmt.Errorf("relation field conflict with column: %s.%s", relation.SourceTable, field)
+			}
+			tgt, err := load(relation.TargetTable)
+			if err != nil {
+				return err
+			}
+			if _, ok := tgt.fields[reverseField]; ok {
+				return fmt.Errorf("relation field conflict with column: %s.%s", relation.TargetTable, reverseField)
+			}
+			continue
+		}
+
+		src, err := load(relation.SourceTable)
 		if err != nil {
 			return err
 		}
-		if _, ok := sourceColumns[relation.SourceColumn]; !ok {
-			return fmt.Errorf("relation source column not found: %s.%s", relation.SourceTable, relation.SourceColumn)
+		for _, col := range splitCompositeColumns(relation.SourceColumn) {
+			if _, ok := src.columns[col]; !ok {
+				return fmt.Errorf("relation source column not found: %s.%s", relation.SourceTable, col)
+			}
 		}
-		field, reverseField := relationFieldNames(relation)
-		if _, ok := sourceFields[field]; ok {
+		if _, ok := src.fields[field]; ok {
 			return fmt.Errorf("relation field conflict with column: %s.%s", relation.SourceTable, field)
 		}
 
-		targetColumns, targetFields, err := loadColumns(relation.TargetTable)
+		tgt, err := load(relation.TargetTable)
 		if err != nil {
 			return err
 		}
-		if _, ok := targetColumns[relation.TargetColumn]; !ok {
-			return fmt.Errorf("relation target column not found: %s.%s", relation.TargetTable, relation.TargetColumn)
+		for _, col := range splitCompositeColumns(relation.TargetColumn) {
+			if _, ok := tgt.columns[col]; !ok {
+				return fmt.Errorf("relation target column not found: %s.%s", relation.TargetTable, col)
+			}
 		}
-		if _, ok := targetFields[reverseField]; ok {
-			return fmt.Errorf("relation field conflict with column: %s.%s", relation.TargetTable, reverseField)
+		if !relation.SkipReverse {
+			if _, ok := tgt.fields[reverseField]; ok {
+				return fmt.Errorf("relation field conflict with column: %s.%s", relation.TargetTable, reverseField)
+			}
 		}
 	}
 	return nil
@@ -707,13 +458,15 @@ func expandTablesForRelations(tables []string, relations []Relation) []string {
 		seen[tableName] = struct{}{}
 	}
 	for _, relation := range relations {
-		if _, ok := seen[relation.SourceTable]; !ok {
-			tables = append(tables, relation.SourceTable)
-			seen[relation.SourceTable] = struct{}{}
-		}
-		if _, ok := seen[relation.TargetTable]; !ok {
-			tables = append(tables, relation.TargetTable)
-			seen[relation.TargetTable] = struct{}{}
+		for _, name := range []string{relation.SourceTable, relation.TargetTable, relation.Through} {
+			if name == "" {
+				continue
+			}
+			if _, ok := seen[name]; ok {
+				continue
+			}
+			tables = append(tables, name)
+			seen[name] = struct{}{}
 		}
 	}
 	return tables
